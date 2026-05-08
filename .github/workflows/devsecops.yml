@@ -21,8 +21,10 @@ jobs:
           python .github/scripts/ai_audit.py
 
       # 2. Secret Scanning - AHORA SIN continue-on-error
-      - name: Gitleaks
+      - name: Gitleaks Scan
         uses: gitleaks/gitleaks-action@v2
+        env:
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
 
       # 3. IaC - AHORA SIN soft_fail (Falla si el Dockerfile es inseguro)
       - name: Checkov Scan
