@@ -1,0 +1,4 @@
+app:
+  applicationId: ${{ secrets.HAWK_APP_ID }}
+  env: development
+  host: http://localhost:8080
