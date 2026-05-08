@@ -1,23 +1,16 @@
 <?php
-// API de Clima con fallos intencionales
-header('Content-Type: application/json');
+require __DIR__ . '/../vendor/autoload.php';
 
-// ERROR: XSS Reflejado (SonarCloud/StackHawk lo verán)
-$user_input = $_GET['city'] ?? 'Buenos Aires';
-if (isset($_GET['debug'])) {
-    echo "Iniciando búsqueda para: " " . $user_input; // Punto de inyección
-}
+// 1. Sanitizar el input (Evita XSS)
+$city = isset($_GET['city']) ? htmlspecialchars($_GET['city'], ENT_QUOTES, 'UTF-8') : 'Buenos Aires';
 
-// ERROR: Uso de shell_exec inseguro (SAST lo marcará)
-// Simula un ping a un servidor de clima
-if (isset($_GET['ping'])) {
-    $host = $_GET['ping'];
-    echo shell_exec("ping -c 1 " . $host);
-}
+// 2. Simulación de API (Quitamos shell_exec para evitar RCE)
+// En lugar de ejecutar un comando de sistema, usamos lógica de PHP
+$temp = rand(15, 30); 
 
-$weatherData = [
-    "city" => $user_input,
-    "temp" => rand(10, 35) . "C"
-];
+echo "<h1>Weather Service</h1>";
+echo "<p>City: " . $city . "</p>";
+echo "<p>Temperature: " . $temp . "°C</p>";
 
-echo json_encode($weatherData);
+// 3. Log de auditoría seguro (Sin inyección de comandos)
+error_log("Consulta de clima realizada para la ciudad: " . $city);
