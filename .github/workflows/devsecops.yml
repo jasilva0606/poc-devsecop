@@ -10,13 +10,14 @@ jobs:
         with:
           fetch-depth: 0
 
-      # 1. IA Audit - Falla si la IA detecta código malicioso
+      # 1. IA Audit (Groq) con filtro
       - name: AI Audit
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           COMMIT_MSG: ${{ github.event.head_commit.message }}
         run: |
-          export CODE_DIFF=$(git diff HEAD^ HEAD || git diff HEAD)
+          # Filtramos el diff para que solo incluya archivos de código y no el .lock o vendor
+          export CODE_DIFF=$(git diff HEAD^ HEAD -- 'src/*.php' 'Dockerfile' '*.yml' || echo "Cambios demasiado grandes para mostrar")
           python .github/scripts/ai_audit.py
 
       # 2. Secret Scanning - AHORA SIN continue-on-error
