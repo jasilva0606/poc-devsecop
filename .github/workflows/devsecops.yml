@@ -10,37 +10,34 @@ jobs:
         with:
           fetch-depth: 0
 
-      # 1. Secret Scanning
-      - name: Gitleaks
-        uses: gitleaks/gitleaks-action@v2
-        continue-on-error: true # Para que no frene el resto del lab
-
-      # 2. IA Audit (Groq)
+      # 1. IA Audit - Falla si la IA detecta código malicioso
       - name: AI Audit
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           COMMIT_MSG: ${{ github.event.head_commit.message }}
         run: |
-          # Intentamos obtener el diff de forma segura
           export CODE_DIFF=$(git diff HEAD^ HEAD || git diff HEAD)
           python .github/scripts/ai_audit.py
 
-      # 3. SCA (Snyk)
-      - name: Snyk Scan
-        uses: snyk/actions/php@master
-        continue-on-error: true
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      # 2. Secret Scanning - AHORA SIN continue-on-error
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
 
-      # 4. IaC (Checkov)
+      # 3. IaC - AHORA SIN soft_fail (Falla si el Dockerfile es inseguro)
       - name: Checkov Scan
         uses: bridgecrewio/checkov-action@master
         with:
           directory: .
           framework: dockerfile
-          soft_fail: true
+          # soft_fail: false (por defecto)
 
-      # 5. Build & Trivy
+      # 4. SCA - Falla si hay librerías vulnerables
+      - name: Snyk Scan
+        uses: snyk/actions/php@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+      # 5. Build y Escaneo de Imagen
       - name: Build Image
         run: docker build -t weather-api:latest .
 
@@ -49,16 +46,5 @@ jobs:
         with:
           image-ref: 'weather-api:latest'
           format: 'table'
-          severity: 'CRITICAL,HIGH'
-
-      # 6. Levantar y DAST (StackHawk)
-      - name: Run App
-        run: docker run -d -p 8080:80 weather-api:latest
-
-      - name: StackHawk DAST
-        uses: stackhawk/hawkscan-action@v2
-        continue-on-error: true
-        with:
-          apiKey: ${{ secrets.HAWK_TOKEN }}
-        env:
-          HAWK_APP_ID: ${{ secrets.HAWK_APP_ID }}
+          exit-code: 1 # Esto hace que el pipeline falle si hay vulnerabilidades
+          severity: 'CRITICAL' # Solo frenamos por CRITICAL para ser realistas
