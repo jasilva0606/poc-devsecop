@@ -1,55 +1,54 @@
-import os
-import requests
-import sys
+import os, sys, requests, re
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+def get_safe_session():
+    session = requests.Session()
+    retry = Retry(total=3, backoff_factor=1, status_forcelist=[429, 500, 502, 503, 504])
+    session.mount('https://', HTTPAdapter(max_retries=retry))
+    return session
+
+def sanitize(text):
+    # Lista negra de patrones sensibles
+    patterns = [
+        (r'(?i)password\s*[:=]\s*[^\s]+', 'password = [REDACTED]'),
+        (r'(?i)api[_-]key\s*[:=]\s*[^\s]+', 'api_key = [REDACTED]'),
+        (r'Bearer\s+[A-Za-z0-9\-\._~\+\/]+=*', 'Bearer [REDACTED]'),
+        (r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', '[EMAIL_REDACTED]')
+    ]
+    for pattern, repl in patterns:
+        text = re.sub(pattern, repl, text)
+    return text[:4000] # Límite de tokens
 
 def audit():
-    # Cambiamos a GROQ_API_KEY
     api_key = os.getenv("GROQ_API_KEY")
-    commit_msg = os.getenv("COMMIT_MSG")
-    code_diff = os.getenv("CODE_DIFF")
-
-    if not api_key:
-        print("Saltando auditoría IA: GROQ_API_KEY no encontrada.")
-        return
-
-    # Prompt optimizado para seguridad
-    prompt = f"""
-    Actúa como un Auditor Senior de DevSecOps. Analiza el siguiente commit:
+    diff = sanitize(os.getenv("CODE_DIFF", ""))
     
-    Mensaje del commit: {commit_msg}
-    Diferencia de código:
-    {code_diff}
-    
-    Indica brevemente:
-    1. Coherencia entre mensaje y código.
-    2. Riesgos de seguridad (OWASP).
-    3. Recomendación de mejora.
-    """
+    if not diff or diff.strip() == "Diff too large":
+        print("✅ No hay cambios significativos para auditar.")
+        return 0
+
+    payload = {
+        "model": "llama-3.3-70b-versatile",
+        "messages": [
+            {"role": "system", "content": "Eres un Auditor Senior DevSecOps. Evalúa vulnerabilidades OWASP y responde en Markdown."},
+            {"role": "user", "content": f"Audita este diff:\n\n{diff}"}
+        ],
+        "temperature": 0.1 # Baja temperatura para mayor precisión técnica
+    }
 
     try:
-        # Endpoint de Groq
-        response = requests.post(
+        response = get_safe_session().post(
             "https://api.groq.com/openai/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json"
-            },
-            json={
-                "model": "llama-3.3-70b-versatile", # Modelo rápido y eficiente en Groq
-                "messages": [
-                    {"role": "system", "content": "Eres un experto en seguridad informática y auditoría de código."},
-                    {"role": "user", "content": prompt}
-                ],
-                "temperature": 0.2
-            }
+            headers={"Authorization": f"Bearer {api_key}"},
+            json=payload,
+            timeout=30
         )
-        
-        result = response.json()
-        print("--- REPORTE DE AUDITORÍA IA (GROQ) ---")
-        print(result['choices'][0]['message']['content'])
-        
+        response.raise_for_status()
+        print(response.json()['choices'][0]['message']['content'])
     except Exception as e:
-        print(f"Error contactando a Groq: {e}")
+        print(f"⚠️ Auditoría IA omitida: {str(e)}")
+    return 0
 
 if __name__ == "__main__":
-    audit()
+    sys.exit(audit())
