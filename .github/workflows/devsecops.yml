@@ -16,10 +16,12 @@ jobs:
           GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
 
       # 2. SAST (Análisis de código estático)
-      - name: PHP Security Audit (PHPStan)
-        run: |
-          composer install --no-interaction --no-progress
-          vendor/bin/phpstan analyse src --level=max
+      - name: PHPStan Static Analysis
+        uses: phpstan/phpstan-action@v1
+        with:
+          version: latest
+          level: 5
+          paths: src
 
       # 3. BUILD CON IMAGEN ULTRA-LIGHT (Alpine)
       - name: Build Protected Image
