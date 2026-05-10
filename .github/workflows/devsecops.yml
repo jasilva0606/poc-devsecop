@@ -197,7 +197,8 @@ jobs:
       - name: 🦅 StackHawk DAST Scan
         id: stackhawk
         env:
-          APP_ID: ${{ secrets.HAWK_APP_ID }} 
+          # AHORA COINCIDE CON EL .YML
+          HAWK_APP_ID: ${{ secrets.HAWK_APP_ID }} 
           APP_ENV: ci
           APP_HOST: http://localhost:8080
           HAWK_TOKEN: ${{ secrets.HAWK_TOKEN }}
@@ -205,7 +206,7 @@ jobs:
           github.event_name == 'push' &&
           steps.start_app.outcome == 'success' &&
           env.HAWK_TOKEN != '' &&
-          env.APP_ID != ''
+          env.HAWK_APP_ID != ''
         uses: stackhawk/hawkscan-action@29a62fe1e926ea50ac87a1b64efc59b82ffd5b7d
         with:
           apiKey: ${{ env.HAWK_TOKEN }}

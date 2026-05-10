@@ -1,18 +1,14 @@
-# .stackhawk.yml corregido
 app:
   applicationId: ${HAWK_APP_ID}
   env: ${APP_ENV}
   host: ${APP_HOST}
-
   paths:
     - /
 
 hawk:
   failureThreshold: high
-
   spider:
     maxDuration: 2
     ajaxSpider: false
-
   scan:
     maxDuration: 10
