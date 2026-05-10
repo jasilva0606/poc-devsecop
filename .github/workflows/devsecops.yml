@@ -270,7 +270,7 @@ jobs:
         # stackhawk/hawkscan-action v2.2.0 — SHA verificado con gh api
         uses: stackhawk/hawkscan-action@29a62fe1e926ea50ac87a1b64efc59b82ffd5b7d
         with:
-          apiKey: ${{ secrets.HAWK_API_KEY }}
+          apiKey: ${{ secrets.HAWK_TOKEN }}
         env:
           # FIX: variables inyectadas desde el workflow, no hardcoded en .stackhawk.yml
           APP_ID: ${{ secrets.HAWK_APP_ID }}
