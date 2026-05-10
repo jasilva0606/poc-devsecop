@@ -1,158 +1,168 @@
 #!/usr/bin/env python3
 """
-AI Security Audit - Enterprise Grade (Optimizado)
-Compatible con la estructura existente, con mejoras de seguridad y robustez
+AI Security Audit — Enterprise Grade (Fixed)
+
+Correcciones aplicadas vs versión original:
+  - FIX-1: Validación de formato de GROQ_API_KEY antes de usarla
+  - FIX-2: Límite explícito de tamaño de diff (truncado en el workflow,
+            pero con segunda línea de defensa aquí)
+  - FIX-3: actor/branch/sha saneados antes de incluirlos en el reporte
+  - FIX-4: Timeout configurable por env var
+  - FIX-5: Exit code diferenciado: 0=ok, 1=error fatal, 2=vulnerabilidades críticas
+            (permite que el caller decida si bloquear)
+  - FIX-6: Logging estructurado en lugar de prints sueltos
 """
 
 import os
-import sys
 import re
+import sys
+import json
+import logging
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-from datetime import datetime
-from typing import Optional, Dict
+from datetime import datetime, timezone
+from typing import Optional
 
 
+# ── Logging estructurado ────────────────────────────────────────────────────
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%SZ",
+)
+log = logging.getLogger(__name__)
+
+# ── Constantes ───────────────────────────────────────────────────────────────
+MAX_DIFF_BYTES     = 6_000        # máximo de caracteres enviados al LLM
+MAX_REPORT_BYTES   = 50_000       # tamaño máximo del reporte final en disco
+GROQ_API_URL       = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_MODEL         = "llama-3.3-70b-versatile"
+
+# Patrón mínimo de formato para una Groq API key legítima
+# (evita enviar valores claramente inválidos o accidentalmente vacíos)
+GROQ_KEY_PATTERN   = re.compile(r'^gsk_[A-Za-z0-9]{40,}$')
+
+
+# ── Sesión HTTP con retry ─────────────────────────────────────────────────────
 def get_safe_session(max_retries: int = 3) -> requests.Session:
-    """Crea sesión HTTP con retry logic y backoff exponencial"""
     session = requests.Session()
     retry = Retry(
         total=max_retries,
         backoff_factor=1,
         status_forcelist=[429, 500, 502, 503, 504],
-        allowed_methods=["POST"]
+        allowed_methods=["POST"],
     )
-    session.mount('https://', HTTPAdapter(max_retries=retry))
+    session.mount("https://", HTTPAdapter(max_retries=retry))
     return session
 
 
-def sanitize(text: str, max_length: int = 6000) -> str:
+# ── Sanitización ─────────────────────────────────────────────────────────────
+def sanitize_text(text: str, max_length: int = MAX_DIFF_BYTES) -> str:
     """
-    Sanitiza contenido sensible ANTES de truncar
-    
-    Args:
-        text: Contenido a sanitizar
-        max_length: Longitud máxima del output
-    
-    Returns:
-        Texto sanitizado y truncado
+    Elimina patrones sensibles del texto y lo trunca al límite indicado.
+    Sanitiza ANTES de truncar para no cortar a la mitad un patrón sensible.
     """
     if not text:
         return ""
-    
-    # Lista extendida de patrones sensibles
+
     patterns = [
-        # Passwords y secrets
-        (r'(?i)password\s*[:=]\s*[^\s]+', 'password=[REDACTED]'),
-        (r'(?i)(api[_-]?key|secret|token)\s*[:=]\s*[^\s]+', r'\1=[REDACTED]'),
-        
-        # Bearer tokens
-        (r'Bearer\s+[A-Za-z0-9\-\._~\+\/]+=*', 'Bearer [REDACTED]'),
-        (r'Authorization:\s*Bearer\s+[^\s]+', 'Authorization: Bearer [REDACTED]'),
-        
-        # Private keys
-        (r'-----BEGIN [A-Z ]+PRIVATE KEY-----.*?-----END [A-Z ]+PRIVATE KEY-----', 
+        (r'(?i)password\s*[:=]\s*\S+',                         'password=[REDACTED]'),
+        (r'(?i)(api[_-]?key|secret|token)\s*[:=]\s*\S+',       r'\1=[REDACTED]'),
+        (r'Bearer\s+[A-Za-z0-9\-._~+/]+=*',                    'Bearer [REDACTED]'),
+        (r'Authorization:\s*Bearer\s+\S+',                     'Authorization: Bearer [REDACTED]'),
+        (r'-----BEGIN [A-Z ]+PRIVATE KEY-----.*?-----END [A-Z ]+PRIVATE KEY-----',
          '[PRIVATE_KEY_REDACTED]'),
-        
-        # Emails
-        (r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', '[EMAIL]'),
-        
-        # AWS keys
-        (r'AKIA[0-9A-Z]{16}', '[AWS_ACCESS_KEY_REDACTED]'),
-        
-        # JWT tokens
+        (r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}',   '[EMAIL]'),
+        (r'AKIA[0-9A-Z]{16}',                                   '[AWS_KEY_REDACTED]'),
         (r'eyJ[a-zA-Z0-9_-]*\.eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]*', '[JWT_REDACTED]'),
-        
-        # URLs con credentials
-        (r'https?://[^:]+:[^@]+@', 'https://[CREDENTIALS_REDACTED]@'),
+        (r'https?://[^:]+:[^@]+@',                              'https://[CREDENTIALS_REDACTED]@'),
+        # FIX-3: limpiar también caracteres de control que podrían escapar del JSON
+        (r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]',                 ''),
     ]
-    
-    # Aplicar sanitización
+
     sanitized = text
-    for pattern, repl in patterns:
-        sanitized = re.sub(pattern, repl, sanitized, flags=re.DOTALL | re.IGNORECASE)
-    
-    # Truncar al límite
+    for pattern, replacement in patterns:
+        sanitized = re.sub(pattern, replacement, sanitized, flags=re.DOTALL | re.IGNORECASE)
+
     if len(sanitized) > max_length:
-        sanitized = sanitized[:max_length] + "\n\n... [TRUNCADO - contenido demasiado largo]"
-    
+        sanitized = sanitized[:max_length] + "\n\n... [TRUNCADO]"
+
     return sanitized
 
 
-def calculate_risk_metrics(diff: str) -> Dict[str, any]:
-    """Calcula métricas de riesgo del diff"""
-    
-    lines = diff.split('\n')
-    
+def sanitize_metadata(value: str, max_len: int = 200) -> str:
+    """
+    Sanitiza campos de metadatos (branch, actor, sha) que van al reporte.
+    Solo permite caracteres alfanuméricos, guiones, barras y puntos.
+    """
+    clean = re.sub(r'[^a-zA-Z0-9/_\-.]', '_', str(value))
+    return clean[:max_len]
+
+
+# ── Métricas de riesgo ────────────────────────────────────────────────────────
+def calculate_risk_metrics(diff: str) -> dict:
+    lines = diff.split("\n")
     metrics = {
-        'lines_added': len([l for l in lines if l.startswith('+') and not l.startswith('+++')]),
-        'lines_removed': len([l for l in lines if l.startswith('-') and not l.startswith('---')]),
-        'files_changed': len(set(re.findall(r'diff --git a/(.*?) b/', diff))),
-        'has_auth_changes': bool(re.search(r'(auth|login|password|credential)', diff, re.IGNORECASE)),
-        'has_crypto_changes': bool(re.search(r'(encrypt|decrypt|cipher|hash|sha256|md5)', diff, re.IGNORECASE)),
-        'has_db_changes': bool(re.search(r'(query|execute|prepare|sql)', diff, re.IGNORECASE)),
-        'has_network_changes': bool(re.search(r'(curl|request|socket|http|fetch)', diff, re.IGNORECASE)),
-        'has_file_ops': bool(re.search(r'(fopen|file_put_contents|unlink|chmod)', diff, re.IGNORECASE)),
+        "lines_added":        len([l for l in lines if l.startswith("+") and not l.startswith("+++")]),
+        "lines_removed":      len([l for l in lines if l.startswith("-") and not l.startswith("---")]),
+        "files_changed":      len(set(re.findall(r'diff --git a/(.*?) b/', diff))),
+        "has_auth_changes":   bool(re.search(r'(auth|login|password|credential)', diff, re.I)),
+        "has_crypto_changes": bool(re.search(r'(encrypt|decrypt|cipher|hash|sha256|md5)', diff, re.I)),
+        "has_db_changes":     bool(re.search(r'(query|execute|prepare|sql)', diff, re.I)),
+        "has_network_changes":bool(re.search(r'(curl|request|socket|http|fetch)', diff, re.I)),
+        "has_file_ops":       bool(re.search(r'(fopen|file_put_contents|unlink|chmod)', diff, re.I)),
     }
-    
-    # Calcular risk score (0-20)
-    risk_score = 0
-    risk_score += min(metrics['lines_added'] // 10, 5)
-    risk_score += 4 if metrics['has_auth_changes'] else 0
-    risk_score += 3 if metrics['has_crypto_changes'] else 0
-    risk_score += 3 if metrics['has_db_changes'] else 0
-    risk_score += 2 if metrics['has_network_changes'] else 0
-    risk_score += 2 if metrics['has_file_ops'] else 0
-    
-    metrics['risk_score'] = risk_score
-    
-    if risk_score >= 12:
-        metrics['risk_level'] = 'CRITICAL'
-    elif risk_score >= 8:
-        metrics['risk_level'] = 'HIGH'
-    elif risk_score >= 4:
-        metrics['risk_level'] = 'MEDIUM'
+
+    score = 0
+    score += min(metrics["lines_added"] // 10, 5)
+    score += 4 if metrics["has_auth_changes"]    else 0
+    score += 3 if metrics["has_crypto_changes"]  else 0
+    score += 3 if metrics["has_db_changes"]      else 0
+    score += 2 if metrics["has_network_changes"] else 0
+    score += 2 if metrics["has_file_ops"]        else 0
+
+    metrics["risk_score"] = score
+    if score >= 12:
+        metrics["risk_level"] = "CRITICAL"
+    elif score >= 8:
+        metrics["risk_level"] = "HIGH"
+    elif score >= 4:
+        metrics["risk_level"] = "MEDIUM"
     else:
-        metrics['risk_level'] = 'LOW'
-    
+        metrics["risk_level"] = "LOW"
+
     return metrics
 
 
+# ── Llamada a Groq API ────────────────────────────────────────────────────────
 def call_groq_api(
     api_key: str,
     diff: str,
-    metrics: Dict,
-    timeout: int = 30
+    metrics: dict,
+    timeout: int = 30,
 ) -> Optional[str]:
     """
-    Llama a Groq API con manejo robusto de errores
-    
-    Args:
-        api_key: Groq API key
-        diff: Código diff sanitizado
-        metrics: Métricas de riesgo
-        timeout: Timeout en segundos
-    
-    Returns:
-        Análisis de seguridad o None si falla
+    Llama a Groq API. Retorna el texto del análisis o None si falla.
+    FIX-1: La validación de formato ya se hizo antes de llegar aquí.
     """
-    
-    system_prompt = """Eres un Auditor Senior de DevSecOps con 15+ años de experiencia.
-Especializado en OWASP Top 10, CWE, SANS Top 25, y Secure Coding Practices.
-Analiza cambios de código identificando vulnerabilidades explotables.
-Responde SIEMPRE en formato Markdown estructurado."""
+    system_prompt = (
+        "Eres un Auditor Senior de DevSecOps con 15+ años de experiencia. "
+        "Especializado en OWASP Top 10, CWE, SANS Top 25, y Secure Coding Practices. "
+        "Analiza cambios de código identificando vulnerabilidades explotables. "
+        "Responde SIEMPRE en formato Markdown estructurado."
+    )
 
     user_prompt = f"""Analiza este diff desde una perspectiva de seguridad:
 
 **MÉTRICAS DE RIESGO:**
-- Risk Level: {metrics['risk_level']}
-- Risk Score: {metrics['risk_score']}/20
-- Líneas modificadas: +{metrics['lines_added']} -{metrics['lines_removed']}
-- Archivos cambiados: {metrics['files_changed']}
-- Cambios en Auth: {'✅' if metrics['has_auth_changes'] else '❌'}
-- Cambios en Crypto: {'✅' if metrics['has_crypto_changes'] else '❌'}
-- Cambios en DB: {'✅' if metrics['has_db_changes'] else '❌'}
+- Risk Level: {metrics["risk_level"]}
+- Risk Score: {metrics["risk_score"]}/20
+- Líneas modificadas: +{metrics["lines_added"]} -{metrics["lines_removed"]}
+- Archivos cambiados: {metrics["files_changed"]}
+- Cambios en Auth: {"✅" if metrics["has_auth_changes"] else "❌"}
+- Cambios en Crypto: {"✅" if metrics["has_crypto_changes"] else "❌"}
+- Cambios en DB: {"✅" if metrics["has_db_changes"] else "❌"}
 
 **DIFF:**
 ```diff
@@ -187,73 +197,68 @@ Proporciona análisis en este formato:
 Sé específico, técnico y prioriza por severidad."""
 
     payload = {
-        "model": "llama-3.3-70b-versatile",
+        "model": GROQ_MODEL,
         "messages": [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
+            {"role": "user",   "content": user_prompt},
         ],
         "temperature": 0.1,
-        "max_tokens": 2000,
-        "top_p": 0.9
+        "max_tokens":  2000,
+        "top_p":       0.9,
     }
 
     try:
-        session = get_safe_session()
+        session  = get_safe_session()
         response = session.post(
-            "https://api.groq.com/openai/v1/chat/completions",
+            GROQ_API_URL,
             headers={
                 "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json"
+                "Content-Type":  "application/json",
             },
             json=payload,
-            timeout=timeout
+            timeout=timeout,
         )
-        
         response.raise_for_status()
-        
         result = response.json()
-        
-        # Validar respuesta
-        if 'error' in result:
-            error_msg = result.get('error', {}).get('message', 'Unknown error')
-            print(f"❌ Groq API Error: {error_msg}")
+
+        if "error" in result:
+            log.error("Groq API error: %s", result["error"].get("message", "unknown"))
             return None
-        
-        if 'choices' not in result or not result['choices']:
-            print(f"❌ Respuesta inesperada de Groq API")
+
+        if not result.get("choices"):
+            log.error("Respuesta inesperada de Groq (sin choices)")
             return None
-        
-        return result['choices'][0]['message']['content']
-        
+
+        return result["choices"][0]["message"]["content"]
+
     except requests.exceptions.Timeout:
-        print(f"❌ Timeout contactando Groq API ({timeout}s)")
+        log.error("Timeout contactando Groq API (%ds)", timeout)
         return None
-    except requests.exceptions.HTTPError as e:
-        print(f"❌ HTTP Error {e.response.status_code}: {e.response.text[:200]}")
+    except requests.exceptions.HTTPError as exc:
+        log.error("HTTP %s: %s", exc.response.status_code, exc.response.text[:200])
         return None
-    except Exception as e:
-        print(f"❌ Error inesperado: {str(e)}")
+    except Exception as exc:                         # noqa: BLE001
+        log.error("Error inesperado llamando a Groq: %s", exc)
         return None
 
 
+# ── Generación de reporte ─────────────────────────────────────────────────────
 def generate_markdown_report(
     analysis: str,
-    metrics: Dict,
+    metrics: dict,
     commit_sha: str,
     branch: str,
-    actor: str
+    actor: str,
 ) -> str:
-    """Genera reporte en Markdown"""
-    
-    timestamp = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')
-    
-    report = f"""# 🤖 AI Security Audit Report
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+    return f"""# 🤖 AI Security Audit Report
 
 **Generated**: {timestamp}
 **Commit**: `{commit_sha[:8]}`
 **Branch**: `{branch}`
 **Author**: `{actor}`
-**Risk Level**: **{metrics['risk_level']}** ({metrics['risk_score']}/20)
+**Risk Level**: **{metrics["risk_level"]}** ({metrics["risk_score"]}/20)
 
 ---
 
@@ -261,20 +266,20 @@ def generate_markdown_report(
 
 | Metric | Value |
 |--------|------:|
-| Files Changed | {metrics['files_changed']} |
-| Lines Added | {metrics['lines_added']} |
-| Lines Removed | {metrics['lines_removed']} |
-| Risk Score | {metrics['risk_score']}/20 |
+| Files Changed | {metrics["files_changed"]} |
+| Lines Added | {metrics["lines_added"]} |
+| Lines Removed | {metrics["lines_removed"]} |
+| Risk Score | {metrics["risk_score"]}/20 |
 
 ### Risk Indicators
 
 | Category | Detected |
 |----------|:--------:|
-| 🔐 Authentication/Authorization | {'✅' if metrics['has_auth_changes'] else '❌'} |
-| 🔒 Cryptography | {'✅' if metrics['has_crypto_changes'] else '❌'} |
-| 🗄️ Database Operations | {'✅' if metrics['has_db_changes'] else '❌'} |
-| 🌐 Network Operations | {'✅' if metrics['has_network_changes'] else '❌'} |
-| 📁 File Operations | {'✅' if metrics['has_file_ops'] else '❌'} |
+| 🔐 Authentication/Authorization | {"✅" if metrics["has_auth_changes"]    else "❌"} |
+| 🔒 Cryptography                 | {"✅" if metrics["has_crypto_changes"]  else "❌"} |
+| 🗄️ Database Operations         | {"✅" if metrics["has_db_changes"]      else "❌"} |
+| 🌐 Network Operations           | {"✅" if metrics["has_network_changes"] else "❌"} |
+| 📁 File Operations              | {"✅" if metrics["has_file_ops"]        else "❌"} |
 
 ---
 
@@ -282,112 +287,117 @@ def generate_markdown_report(
 
 ---
 
-*This analysis was generated by AI. Manual security review is recommended for production deployments.*
+*This analysis was generated by AI and should be reviewed by a human security engineer
+before making decisions in production. Manual review is always recommended.*
 """
-    
-    return report
 
 
+# ── Función principal ─────────────────────────────────────────────────────────
 def audit() -> int:
     """
-    Función principal de auditoría
-    
-    Returns:
-        Exit code (0 = success, 1 = failure)
+    Retorna:
+      0 — auditoría completada sin vulnerabilidades críticas
+      1 — error fatal (no se pudo completar la auditoría)
+      2 — FIX-5: vulnerabilidades CRÍTICAS detectadas (permite bloquear el pipeline)
     """
-    
-    # Obtener variables de entorno
-    api_key = os.getenv("GROQ_API_KEY")
+
+    # ── Leer variables de entorno ──────────────────────────────────────────────
+    api_key  = os.getenv("GROQ_API_KEY", "").strip()
     raw_diff = os.getenv("CODE_DIFF", "")
-    
-    commit_sha = os.getenv("GITHUB_SHA", "unknown")
-    branch = os.getenv("GITHUB_REF_NAME", "unknown")
-    actor = os.getenv("GITHUB_ACTOR", "unknown")
-    
-    # Validar API key
+
+    # FIX-3: sanitizar metadatos antes de usarlos en cualquier salida
+    commit_sha = sanitize_metadata(os.getenv("GITHUB_SHA",       "unknown"))
+    branch     = sanitize_metadata(os.getenv("GITHUB_REF_NAME",  "unknown"))
+    actor      = sanitize_metadata(os.getenv("GITHUB_ACTOR",     "unknown"))
+    timeout    = int(os.getenv("GROQ_TIMEOUT", "30"))
+
+    # ── FIX-1: Validar formato de API key ─────────────────────────────────────
     if not api_key:
-        print("⚠️  GROQ_API_KEY no encontrada")
-        print("ℹ️  Configure el secret para habilitar análisis con IA")
-        print("✅ Pipeline continúa sin auditoría IA")
+        log.info("GROQ_API_KEY no configurada — omitiendo auditoría IA")
+        log.info("Configure el secret en Settings > Secrets para habilitarla")
         return 0
-    
-    # Sanitizar diff
-    diff = sanitize(raw_diff, max_length=6000)
-    
-    # Validar que hay contenido
-    if not diff or diff.strip() in ["", "Diff sanitizado", "Diff too large"]:
-        print("ℹ️  No hay cambios significativos para auditar")
-        print("✅ Pipeline continúa")
+
+    if not GROQ_KEY_PATTERN.match(api_key):
+        log.warning(
+            "GROQ_API_KEY tiene formato inesperado (esperado: gsk_...). "
+            "Verificar que el secret está correctamente configurado."
+        )
+        # No fallamos el pipeline por esto, pero sí avisamos
         return 0
-    
-    print("\n" + "="*70)
-    print("🤖 INICIANDO AUDITORÍA DE SEGURIDAD CON IA (GROQ)")
-    print("="*70 + "\n")
-    
-    # Calcular métricas
-    print("📊 Calculando métricas de riesgo...")
+
+    # ── FIX-2: Sanitizar y truncar diff ───────────────────────────────────────
+    diff = sanitize_text(raw_diff, max_length=MAX_DIFF_BYTES)
+
+    if not diff.strip():
+        log.info("Sin cambios significativos para auditar — pipeline continúa")
+        return 0
+
+    # ── Ejecutar auditoría ─────────────────────────────────────────────────────
+    log.info("="*70)
+    log.info("INICIANDO AUDITORÍA DE SEGURIDAD CON IA (GROQ / %s)", GROQ_MODEL)
+    log.info("="*70)
+
     metrics = calculate_risk_metrics(diff)
-    
-    print(f"   • Risk Level: {metrics['risk_level']}")
-    print(f"   • Risk Score: {metrics['risk_score']}/20")
-    print(f"   • Files Changed: {metrics['files_changed']}")
-    print(f"   • Lines: +{metrics['lines_added']} -{metrics['lines_removed']}\n")
-    
-    # Llamar a Groq API
-    print("🔄 Consultando Groq LLM...")
-    analysis = call_groq_api(api_key, diff, metrics)
-    
+    log.info(
+        "Métricas — Risk: %s (%s/20)  Files: %s  Lines: +%s/-%s",
+        metrics["risk_level"], metrics["risk_score"],
+        metrics["files_changed"], metrics["lines_added"], metrics["lines_removed"],
+    )
+
+    log.info("Consultando Groq LLM...")
+    analysis = call_groq_api(api_key, diff, metrics, timeout=timeout)
+
     if not analysis:
-        print("⚠️  No se pudo completar auditoría IA")
-        print("ℹ️  Revisar logs para más detalles")
-        print("✅ Pipeline continúa (auditoría no es bloqueante)")
+        log.warning("No se pudo completar la auditoría IA — revisar logs")
+        log.info("Pipeline continúa (auditoría IA no es gate duro)")
         return 0
-    
-    # Generar reporte
-    print("\n📝 Generando reporte...")
+
+    # ── Generar y guardar reporte ──────────────────────────────────────────────
     report = generate_markdown_report(analysis, metrics, commit_sha, branch, actor)
-    
-    # Guardar reporte
-    report_file = 'ai-audit-report.md'
+
+    # FIX: limitar tamaño del reporte en disco
+    if len(report) > MAX_REPORT_BYTES:
+        report = report[:MAX_REPORT_BYTES] + "\n\n... [REPORTE TRUNCADO]\n"
+
+    report_file = "ai-audit-report.md"
     try:
-        with open(report_file, 'w', encoding='utf-8') as f:
-            f.write(report)
-        print(f"✅ Reporte guardado: {report_file}\n")
-    except Exception as e:
-        print(f"⚠️  Error guardando reporte: {e}")
-    
-    # Mostrar análisis en consola
-    print("="*70)
-    print("📋 ANÁLISIS DE SEGURIDAD")
-    print("="*70)
-    print(analysis)
-    print("="*70 + "\n")
-    
-    # Determinar exit code basado en severidad
-    # Por ahora no fallamos el pipeline, solo informamos
-    if 'CRITICAL' in analysis.upper():
-        print("🚨 Se detectaron vulnerabilidades CRÍTICAS")
-        print("⚠️  Revisar el reporte antes de hacer merge")
-    elif 'HIGH' in analysis.upper():
-        print("⚠️  Se detectaron vulnerabilidades HIGH")
-        print("ℹ️  Considerar revisión de seguridad")
+        with open(report_file, "w", encoding="utf-8") as fh:
+            fh.write(report)
+        log.info("Reporte guardado en: %s", report_file)
+    except OSError as exc:
+        log.warning("No se pudo guardar el reporte: %s", exc)
+
+    # ── Mostrar resumen en consola ─────────────────────────────────────────────
+    log.info("="*70)
+    log.info("ANÁLISIS DE SEGURIDAD")
+    log.info("="*70)
+    print(analysis)           # print deliberado: va al step summary de Actions
+    log.info("="*70)
+
+    # ── FIX-5: Exit code diferenciado ─────────────────────────────────────────
+    analysis_upper = analysis.upper()
+    if "CRITICAL" in analysis_upper:
+        log.warning("🚨 Vulnerabilidades CRÍTICAS detectadas — revisar antes de merge")
+        log.info("Risk Level: %s | Reporte: %s", metrics["risk_level"], report_file)
+        # Retornar 2 permite que el caller (workflow) decida si bloquear o solo avisar
+        return 2
+
+    if "HIGH" in analysis_upper:
+        log.warning("⚠️ Vulnerabilidades HIGH detectadas — considerar revisión")
     else:
-        print("✅ No se detectaron vulnerabilidades críticas")
-    
-    print(f"\n📊 Risk Level: {metrics['risk_level']}")
-    print(f"📄 Reporte completo en: {report_file}\n")
-    
+        log.info("✅ No se detectaron vulnerabilidades críticas")
+
+    log.info("Risk Level: %s | Reporte: %s", metrics["risk_level"], report_file)
     return 0
 
 
+# ── Entry point ───────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     try:
         sys.exit(audit())
     except KeyboardInterrupt:
-        print("\n⚠️  Auditoría cancelada")
+        log.warning("Auditoría cancelada por el usuario")
         sys.exit(130)
-    except Exception as e:
-        print(f"\n❌ Error fatal: {str(e)}")
-        import traceback
-        traceback.print_exc()
+    except Exception as exc:                          # noqa: BLE001
+        log.critical("Error fatal: %s", exc, exc_info=True)
         sys.exit(1)

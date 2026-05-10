@@ -1,0 +1,56 @@
+# .dockerignore — FIX: reducir superficie de ataque y tamaño de imagen
+#
+# Sin este archivo, `COPY . .` en el Dockerfile incluye .git, tests,
+# archivos de CI y documentación en la imagen de producción.
+
+# Control de versiones
+.git
+.gitignore
+.gitattributes
+
+# CI/CD — no deben estar en la imagen de producción
+.github/
+.stackhawk.yml
+
+# Dependencias de desarrollo (se instalan en el builder stage, no en producción)
+# vendor/ se copia desde el builder stage, no desde el contexto local
+vendor/
+
+# Tests
+tests/
+phpunit.xml
+phpunit.xml.dist
+.phpunit.cache/
+
+# Documentación
+README.md
+CHANGELOG.md
+CONTRIBUTING.md
+LICENSE
+*.md
+
+# Archivos de configuración de herramientas locales
+.editorconfig
+.php-cs-fixer.php
+phpstan.neon
+phpstan.neon.dist
+psalm.xml
+
+# Artefactos de build y análisis de seguridad
+*.sarif
+*.json
+!composer.json
+!composer.lock
+audit-log.json
+ai-audit-report.md
+snyk-results.json
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
