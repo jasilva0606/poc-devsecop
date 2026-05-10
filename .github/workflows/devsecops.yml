@@ -265,14 +265,22 @@ jobs:
 
       - name: 🦅 StackHawk DAST Scan
         id: stackhawk
-        if: github.event_name == 'push' && steps.start_app.outcome == 'success'
-        # stackhawk/hawkscan-action — usar tag semántico estable
+        # Se omite si HAWK_TOKEN o HAWK_APP_ID no están configurados como secrets.
+        # Para habilitarlo: Settings → Secrets and variables → Actions → New repository secret
+        if: >-
+          github.event_name == 'push' &&
+          steps.start_app.outcome == 'success' &&
+          secrets.HAWK_TOKEN != '' &&
+          secrets.HAWK_APP_ID  != ''
         # stackhawk/hawkscan-action v2.2.0 — SHA verificado con gh api
         uses: stackhawk/hawkscan-action@29a62fe1e926ea50ac87a1b64efc59b82ffd5b7d
         with:
           apiKey: ${{ secrets.HAWK_TOKEN }}
+          # FIX: el archivo se llama .stackhawk.yml (con punto), no stackhawk.yml
+          configurationFiles: .stackhawk.yml
         env:
-          # FIX: variables inyectadas desde el workflow, no hardcoded en .stackhawk.yml
+          # FIX: StackHawk lee estas env vars directamente desde el proceso,
+          # no las interpola desde el YAML — los valores van aquí, no en .stackhawk.yml
           APP_ID: ${{ secrets.HAWK_APP_ID }}
           APP_ENV: ci
           APP_HOST: http://localhost:8080

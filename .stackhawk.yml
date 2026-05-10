@@ -1,38 +1,29 @@
 # .stackhawk.yml — StackHawk DAST configuration
 #
-# FIX: Se eliminó la sintaxis ${{ secrets.X }} que es exclusiva de GitHub Actions
-# y no es válida en el YAML nativo de StackHawk CLI.
+# Los valores de applicationId, env y host se inyectan como variables de
+# entorno desde el step de GitHub Actions. StackHawk CLI los interpola
+# automáticamente usando la sintaxis ${VAR}.
 #
-# Los valores sensibles se inyectan como variables de entorno desde el workflow:
+# Variables requeridas (definidas en el step del workflow):
 #   APP_ID   → secrets.HAWK_APP_ID
-#   APP_ENV  → "ci" (hardcoded en el workflow)
-#   APP_HOST → "http://localhost:8080" (runtime en el runner)
-#
-# Referencia de variables: https://docs.stackhawk.com/workflow-integrations/github-actions.html
+#   APP_ENV  → "ci"
+#   APP_HOST → "http://localhost:8080"
 
 app:
-  # Leer applicationId desde env var inyectada por el workflow
   applicationId: ${APP_ID}
   env: ${APP_ENV}
   host: ${APP_HOST}
 
-  # Configuración de rutas a escanear
   paths:
     - /
 
-  # Definir qué códigos HTTP indican que la app está activa
-  # (evita false positives si la app retorna 404 en /)
-  antiCsrfParam: _token
-
 hawk:
-  # Fallar el scan si se encuentran hallazgos de severidad HIGH o CRITICAL
+  # Fallar el scan si se encuentran hallazgos HIGH o CRITICAL
   failureThreshold: high
 
-  # Spider configuration
   spider:
-    maxDuration: 2          # minutos máximo de spidering
-    ajaxSpider: false       # deshabilitar si la app no usa JS dinámico
+    maxDuration: 2
+    ajaxSpider: false
 
   scan:
-    # Tiempo máximo de escaneo activo en minutos
     maxDuration: 10
