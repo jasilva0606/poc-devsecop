@@ -1,16 +1,6 @@
-# .stackhawk.yml — StackHawk DAST configuration
-#
-# Los valores de applicationId, env y host se inyectan como variables de
-# entorno desde el step de GitHub Actions. StackHawk CLI los interpola
-# automáticamente usando la sintaxis ${VAR}.
-#
-# Variables requeridas (definidas en el step del workflow):
-#   APP_ID   → secrets.HAWK_APP_ID
-#   APP_ENV  → "ci"
-#   APP_HOST → "http://localhost:8080"
-
+# .stackhawk.yml corregido
 app:
-  applicationId: ${APP_ID}
+  applicationId: ${HAWK_APP_ID}
   env: ${APP_ENV}
   host: ${APP_HOST}
 
@@ -18,7 +8,6 @@ app:
     - /
 
 hawk:
-  # Fallar el scan si se encuentran hallazgos HIGH o CRITICAL
   failureThreshold: high
 
   spider:

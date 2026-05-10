@@ -197,17 +197,16 @@ jobs:
       - name: 🦅 StackHawk DAST Scan
         id: stackhawk
         env:
-          HAWK_TOKEN: ${{ secrets.HAWK_TOKEN }}
-          HAWK_APP_ID: ${{ secrets.HAWK_APP_ID }}
+          APP_ID: ${{ secrets.HAWK_APP_ID }} 
           APP_ENV: ci
           APP_HOST: http://localhost:8080
-        # FIX: Se usa 'env' en lugar de 'secrets' en la condición IF
+          HAWK_TOKEN: ${{ secrets.HAWK_TOKEN }}
         if: >-
           github.event_name == 'push' &&
           steps.start_app.outcome == 'success' &&
           env.HAWK_TOKEN != '' &&
-          env.HAWK_APP_ID != ''
-        uses: stackhawk/hawkscan-action@29a62fe1e926ea50ac87a1b64efc59b82ffd5b7d # v2.2.0
+          env.APP_ID != ''
+        uses: stackhawk/hawkscan-action@29a62fe1e926ea50ac87a1b64efc59b82ffd5b7d
         with:
           apiKey: ${{ env.HAWK_TOKEN }}
           configurationFiles: .stackhawk.yml
