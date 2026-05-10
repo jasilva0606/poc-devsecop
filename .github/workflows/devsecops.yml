@@ -262,7 +262,8 @@ jobs:
         id: stackhawk
         if: github.event_name == 'push' && steps.start_app.outcome == 'success'
         # stackhawk/hawkscan-action — usar tag semántico estable
-        uses: stackhawk/hawkscan-action@v2.2.0
+        # stackhawk/hawkscan-action v2.2.0 — SHA verificado con gh api
+        uses: stackhawk/hawkscan-action@29a62fe1e926ea50ac87a1b64efc59b82ffd5b7d
         with:
           apiKey: ${{ secrets.HAWK_API_KEY }}
         env:
