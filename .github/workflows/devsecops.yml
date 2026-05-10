@@ -43,7 +43,7 @@ jobs:
         continue-on-error: true
         with:
           path: ./
-          args: --results=verified,unknown
+          extra_args: --results=verified,unknown
 
       # ========================================
       # FASE 2: DEPENDENCY SECURITY (SCA)
