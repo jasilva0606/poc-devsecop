@@ -125,19 +125,24 @@ jobs:
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: |
-          # Descargar CLI + verificar checksum antes de ejecutar
+          # Descargar CLI conservando el nombre original para que sha256sum lo encuentre
           SNYK_VERSION="v1.1296.2"
-          curl -sSL "https://downloads.snyk.io/cli/${SNYK_VERSION}/snyk-linux"        -o snyk
-          curl -sSL "https://downloads.snyk.io/cli/${SNYK_VERSION}/snyk-linux.sha256" -o snyk.sha256
-          sha256sum -c snyk.sha256
-          chmod +x snyk
-          sudo mv snyk /usr/local/bin/snyk
+          curl -sSL "https://downloads.snyk.io/cli/${SNYK_VERSION}/snyk-linux"        -o snyk-linux
+          curl -sSL "https://downloads.snyk.io/cli/${SNYK_VERSION}/snyk-linux.sha256" -o snyk-linux.sha256
+
+          # Verificar integridad antes de ejecutar nada
+          sha256sum -c snyk-linux.sha256
+
+          # Instalar en PATH
+          chmod +x snyk-linux
+          sudo mv snyk-linux /usr/local/bin/snyk
 
           snyk test \
             --severity-threshold=high \
             --json > snyk-results.json || SNYK_EXIT=$?
 
-          # Exit 1 = vulnerabilidades encontradas (gate duro), 2+ = error de configuración
+          # Exit 0 = sin vulnerabilidades, 1 = vulnerabilidades encontradas (gate duro)
+          # Exit 2+ = error de configuración (no debe silenciarse)
           if [ "${SNYK_EXIT:-0}" -eq 2 ] || [ "${SNYK_EXIT:-0}" -ge 3 ]; then
             echo "::error::Snyk falló por error de configuración (exit ${SNYK_EXIT})"
             exit "${SNYK_EXIT}"
