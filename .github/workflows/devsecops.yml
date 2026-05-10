@@ -33,11 +33,14 @@ jobs:
           severity: 'CRITICAL,HIGH'
           exit-code: 1  # Rompe el pipeline si hay críticos
 
-      # 5. SBOM (Cumplimiento Legal/Compliance)
+      # 5. SBOM (Cumplimiento Legal con acceso al Docker Daemon)
       - name: Generate SBOM
         run: |
-          docker run --rm -v $(pwd):/out anchore/syft weather-api:latest -o spdx-json > sbom.json
-
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v $(pwd):/out \
+            anchore/syft:latest \
+            docker:weather-api:latest -o spdx-json > sbom.json
       # 6. AI AUDIT CON SANITIZACIÓN DE LOGS (El 10/10)
       - name: AI Security Audit
         env:
