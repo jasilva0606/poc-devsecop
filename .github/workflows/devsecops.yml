@@ -68,14 +68,16 @@ jobs:
           args: --severity-threshold=high --json-file-output=snyk-results.json
 
       # ========================================
-      # FASE 3: SAST (Static Analysis)
+      # FASE 3: SAST (Análisis Estático)
       # ========================================
       - name: 🧬 PHPStan Static Analysis
         id: phpstan
         run: |
-          # Usamos la imagen oficial pero con punto de entrada directo para evitar fallos de volumen
-          docker run --rm -v $(pwd):/app ghcr.io/phpstan/phpstan analyse src tests --level=6 --error-format=github
-
+          # Instalamos dependencias de desarrollo para que PHPStan vea PHPUnit
+          composer install --optimize-autoloader
+          
+          # Ejecutamos el binario local
+          vendor/bin/phpstan analyse src tests --level=6 --error-format=github
       - name: 🎯 Semgrep SAST Scan (Corregido)
         id: semgrep
         uses: semgrep/semgrep-action@v1 # Versión actualizada
