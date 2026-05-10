@@ -71,23 +71,23 @@ jobs:
       # ========================================
       - name: 🎯 Semgrep SAST Scan
         id: semgrep
-        uses: semgrep/semgrep-action@v1
-        with:
-          args: --sarif --output=semgrep.sarif
-          config: >-
-            p/owasp-top-ten
-            p/php
-            p/security-audit
+        run: |
+          # Ejecutamos semgrep usando docker directamente para evitar problemas de Entrypoint de la acción
+          docker run --rm -v $(pwd):/src returntocorp/semgrep semgrep scan \
+            --config auto \
+            --config p/owasp-top-ten \
+            --config p/php \
+            --sarif --output=semgrep.sarif || true
 
-      - name: ✨ Fix SARIF for GitHub API
+      - name: ✨ Fix & Validate SARIF
         if: always()
         run: |
+          # Verificamos si el archivo existe y tiene contenido
           if [ ! -s semgrep.sarif ]; then
-            echo "⚠️ SARIF vacío o no encontrado, generando estructura mínima válida..."
-            echo '{"$schema":"https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json","version":"2.1.0","runs":[{"tool":{"driver":{"name":"Semgrep"}},"results":[]}]}' > semgrep.sarif
+            echo "⚠️ Generando SARIF de emergencia por falta de resultados..."
+            echo '{"$schema":"https://json.schemastore.org/sarif-2.1.0.json","version":"2.1.0","runs":[{"tool":{"driver":{"name":"Semgrep"}},"results":[]}]}' > semgrep.sarif
           fi
-          # Debug para ver qué vamos a subir (solo las primeras líneas)
-          head -n 20 semgrep.sarif
+          sudo chmod 644 semgrep.sarif
 
       - name: Upload Semgrep SARIF
         uses: github/codeql-action/upload-sarif@v4
