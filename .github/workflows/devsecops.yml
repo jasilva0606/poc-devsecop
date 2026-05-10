@@ -190,13 +190,13 @@ jobs:
         id: start_app
         if: github.event_name == 'push'
         run: |
-          # En lugar de docker run, usamos el servidor interno de PHP 
-          # Esto garantiza que el puerto 8080 responda a peticiones HTTP
-          php -S 0.0.0.0:8080 -t public/ &
+          # Forzamos el puerto 8080 mapeado al puerto que use tu app (ej: 80 o 9000)
+          # Si tu app usa 80 internamente:
+          docker run -d --name weather-api-dast -p 8080:80 weather-api:${{ github.sha }}
           
-          # Esperar a que el puerto esté abierto
-          timeout 30 bash -c 'until curl -s http://localhost:8080 > /dev/null; do sleep 2; echo "Esperando app..."; done'
-          echo "✅ App levantada con éxito en puerto 8080"
+          # Esperar a que responda HTTP 200 o cualquier respuesta
+          timeout 60 bash -c 'until curl -s --head  http://localhost:8080 | grep "200\|301\|302\|404" > /dev/null; do sleep 3; echo "Esperando contenedor..."; done'
+          echo "✅ Contenedor Docker listo"
 
       - name: 🦅 StackHawk DAST Scan
         id: stackhawk
