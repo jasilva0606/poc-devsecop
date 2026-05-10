@@ -73,12 +73,12 @@ jobs:
         id: semgrep
         uses: semgrep/semgrep-action@v1
         with:
-          args: scan --sarif --output=semgrep.sarif
           config: >-
             p/owasp-top-ten
             p/php
             p/security-audit
-          generateSarif: "1"
+        env:
+          SEMGREP_SARIF_JSON: "1" 
 
       - name: Upload Semgrep SARIF
         uses: github/codeql-action/upload-sarif@v4
