@@ -37,13 +37,12 @@ jobs:
         env:
           GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
 
-      - name: 🔍 TruffleHog Secret Scan (Corregido)
+      - name: 🔍 TruffleHog Secret Scan
         id: trufflehog
-        uses: trufflesecurity/trufflehog@main # Usar main para actualizaciones de lógica
+        uses: trufflesecurity/trufflehog@main
         continue-on-error: true
         with:
           path: ./
-          # CORRECCIÓN 1: Se eliminan base/head manuales y extra_args (ahora es args)
           args: --results=verified,unknown
 
       # ========================================
@@ -56,7 +55,7 @@ jobs:
           extensions: mbstring, xml, ctype, json
 
       - name: Install Dependencies
-        run: composer install --no-dev --optimize-autoloader
+        run: composer install --no-interaction --prefer-dist
 
       - name: 📦 Snyk Dependency Scan (SCA)
         id: snyk
@@ -68,28 +67,27 @@ jobs:
           args: --severity-threshold=high --json-file-output=snyk-results.json
 
       # ========================================
-      # FASE 3: SAST (Análisis Estático)
+      # FASE 3: SAST (Static Analysis)
       # ========================================
       - name: 🧬 PHPStan Static Analysis
         id: phpstan
         run: |
-          # Instalamos dependencias de desarrollo para que PHPStan vea PHPUnit
-          composer install --optimize-autoloader
-          
-          # Ejecutamos el binario local
+          # Instalamos PHPStan y dependencias de test para evitar errores de clases desconocidas
+          composer require --dev phpstan/phpstan phpunit/phpunit --no-interaction
           vendor/bin/phpstan analyse src tests --level=6 --error-format=github
-      - name: 🎯 Semgrep SAST Scan (Corregido)
+
+      - name: 🎯 Semgrep SAST Scan
         id: semgrep
-        uses: semgrep/semgrep-action@v1 # Versión actualizada
+        uses: semgrep/semgrep-action@v1
         with:
           config: >-
             p/owasp-top-ten
             p/php
             p/security-audit
-          generateSarif: "1" # CORRECCIÓN 2: Se pasa como string para evitar warnings
+          generateSarif: "1"
 
       - name: Upload Semgrep SARIF
-        uses: github/codeql-action/upload-sarif@v4 # Actualizado a v4
+        uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           sarif_file: semgrep.sarif
@@ -118,9 +116,7 @@ jobs:
       - name: 🐳 Build Protected Image
         id: build
         run: |
-          docker build \
-            -t weather-api:${{ github.sha }} \
-            .
+          docker build -t weather-api:${{ github.sha }} .
 
       - name: 🛡️ Trivy Container Scan
         id: trivy
@@ -130,6 +126,7 @@ jobs:
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
+          exit-code: '0' # Permitimos que continúe para subir el reporte SARIF
 
       - name: Upload Trivy SARIF
         uses: github/codeql-action/upload-sarif@v4
@@ -137,14 +134,23 @@ jobs:
         with:
           sarif_file: 'trivy-results.sarif'
 
-      # ... (Fases 6 a 9 se mantienen igual) ...
+      # ========================================
+      # FASE 10: SECURITY METRICS & REPORTING
+      # ========================================
+      - name: 📊 Calculate Security Score
+        id: security_score
+        if: always()
+        run: |
+          SCORE=100
+          if [ "${{ steps.gitleaks.outcome }}" != "success" ]; then SCORE=$((SCORE - 25)); fi
+          if [ "${{ steps.snyk.outcome }}" == "failure" ]; then SCORE=$((SCORE - 15)); fi
+          if [ "${{ steps.phpstan.outcome }}" != "success" ]; then SCORE=$((SCORE - 15)); fi
+          if [ "${{ steps.trivy.outcome }}" != "success" ]; then SCORE=$((SCORE - 20)); fi
+          echo "score=$SCORE" >> $GITHUB_OUTPUT
 
-      # ========================================
-      # FASE 10: REPORTING (Corregido contra Inyección)
-      # ========================================
       - name: 📋 Generate Pipeline Summary
         if: always()
-        env: # CORRECCIÓN 3: Pasar datos mediante ENV para evitar Shell Injection detectada por Semgrep
+        env:
           RUN_NUM: ${{ github.run_number }}
           SHA: ${{ github.sha }}
           BRANCH: ${{ github.ref_name }}
@@ -161,28 +167,41 @@ jobs:
           **Security Score**: **$SCORE/100**
           
           ---
-          ### 🔒 Security Checks
+          ### 🔒 Security Status
           | Tool | Status |
           | :--- | :---: |
           | 🔐 Gitleaks | ${{ steps.gitleaks.outcome == 'success' && '✅' || '❌' }} |
+          | 📦 Snyk (SCA) | ${{ steps.snyk.outcome == 'success' && '✅' || '⚠️' }} |
           | 🧬 PHPStan | ${{ steps.phpstan.outcome == 'success' && '✅' || '❌' }} |
+          | 🎯 Semgrep | ${{ steps.semgrep.outcome == 'success' && '✅' || '⚠️' }} |
+          | 🏗️ Checkov | ${{ steps.checkov.outcome == 'success' && '✅' || '❌' }} |
           | 🛡️ Trivy | ${{ steps.trivy.outcome == 'success' && '✅' || '❌' }} |
           EOF
 
       # ========================================
-      # FASE 12: AUDIT LOGGING (Corregido)
+      # FASE 12: AUDIT LOGGING
       # ========================================
       - name: 📝 Generate Audit Log
         if: always()
         env:
           SCORE: ${{ steps.security_score.outputs.score }}
+          BRANCH: ${{ github.ref_name }}
+          USER: ${{ github.actor }}
         run: |
           cat > audit-log.json << EOF
           {
-            "audit_version": "2.0",
             "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
             "pipeline_run": "${{ github.run_number }}",
             "security_score": $SCORE,
+            "branch": "$BRANCH",
+            "triggered_by": "$USER",
             "status": "${{ job.status }}"
           }
           EOF
+
+      - name: 📤 Upload Audit Log
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: audit-log-${{ github.sha }}
+          path: audit-log.json
