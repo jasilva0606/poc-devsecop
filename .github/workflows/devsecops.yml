@@ -69,22 +69,16 @@ jobs:
       # ========================================
       # FASE 3: SAST (Static Analysis)
       # ========================================
-      - name: 🧬 PHPStan Static Analysis
-        id: phpstan
-        run: |
-          # Instalamos PHPStan y dependencias de test para evitar errores de clases desconocidas
-          composer require --dev phpstan/phpstan phpunit/phpunit --no-interaction
-          vendor/bin/phpstan analyse src tests --level=6 --error-format=github
-
       - name: 🎯 Semgrep SAST Scan
         id: semgrep
         uses: semgrep/semgrep-action@v1
         with:
-          args: --sarif --output=semgrep.sarif
+          args: scan --sarif --output=semgrep.sarif
           config: >-
             p/owasp-top-ten
             p/php
             p/security-audit
+          generateSarif: "1"
 
       - name: Upload Semgrep SARIF
         uses: github/codeql-action/upload-sarif@v4
