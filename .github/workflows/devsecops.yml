@@ -184,18 +184,19 @@ jobs:
           category: trivy
 
       # ──────────────────────────────────────────────────────────────────────
-      # FASE 6: DAST — StackHawk (FIXED)
+      # FASE 6: DAST — StackHawk (READY FOR SCAN)
       # ──────────────────────────────────────────────────────────────────────
       - name: 🌐 Start App for DAST
         id: start_app
         if: github.event_name == 'push'
         run: |
-          # Usamos --network host para que el puerto 8080 sea realmente localhost
-          docker run -d --name weather-api-dast --network host weather-api:${{ github.sha }}
+          # En lugar de docker run, usamos el servidor interno de PHP 
+          # Esto garantiza que el puerto 8080 responda a peticiones HTTP
+          php -S 0.0.0.0:8080 -t public/ &
           
-          # Esperamos a que la app responda (cambiamos el check a uno más simple si es necesario)
-          timeout 60 bash -c 'until curl -s http://localhost:8080 > /dev/null; do sleep 2; echo "Esperando app..."; done'
-          echo "✅ App lista en http://localhost:8080"
+          # Esperar a que el puerto esté abierto
+          timeout 30 bash -c 'until curl -s http://localhost:8080 > /dev/null; do sleep 2; echo "Esperando app..."; done'
+          echo "✅ App levantada con éxito en puerto 8080"
 
       - name: 🦅 StackHawk DAST Scan
         id: stackhawk
@@ -213,6 +214,7 @@ jobs:
         with:
           apiKey: ${{ env.HAWK_TOKEN }}
           configurationFiles: .stackhawk.yml
+
       - name: 🛑 Stop DAST App
         if: always() && github.event_name == 'push'
         run: docker rm -f weather-api-dast 2>/dev/null || true
