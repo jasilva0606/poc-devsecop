@@ -12,13 +12,14 @@ class WeatherTest extends TestCase
     public function testWeatherApiResponseStructure(): void
     {
         // Simulamos la estructura que genera src/index.php
-        $userInput = "Moron";
+        // CORRECCIÓN: Se unifica el nombre a $user_input (antes estaba mezclado con $userInput)
+        $user_input = "Moron";
         $mockResponse = [
             "city" => $user_input,
             "temp" => rand(10, 35) . "C"
         ];
 
-        // Validamos que existan las claves requeridas para una Fintech
+        // Validamos que existan las claves requeridas
         $this->assertArrayHasKey('city', $mockResponse, "La respuesta debe contener la ciudad.");
         $this->assertArrayHasKey('temp', $mockResponse, "La respuesta debe contener la temperatura.");
         
