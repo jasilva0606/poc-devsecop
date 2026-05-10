@@ -69,6 +69,13 @@ jobs:
       # ========================================
       # FASE 3: SAST (Static Analysis)
       # ========================================
+      - name: 🧬 PHPStan Static Analysis
+        id: phpstan
+        run: |
+          # Instalamos PHPStan y dependencias necesarias
+          composer require --dev phpstan/phpstan phpunit/phpunit --no-interaction
+          vendor/bin/phpstan analyse src --level=5 --error-format=github
+
       - name: 🎯 Semgrep SAST Scan
         id: semgrep
         run: |
