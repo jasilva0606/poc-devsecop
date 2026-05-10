@@ -156,7 +156,7 @@ jobs:
         with:
           name: snyk-results-${{ github.sha }}
           path: snyk-results.json
-          retention-days: 90
+          retention-days: 7
 
       # ──────────────────────────────────────────────────────────────────────
       # FASE 3: SAST (Static Analysis)
@@ -186,7 +186,7 @@ jobs:
             echo "⚠️ Generando SARIF vacío de emergencia..."
             printf '{"$schema":"https://json.schemastore.org/sarif-2.1.0.json","version":"2.1.0","runs":[{"tool":{"driver":{"name":"Semgrep"}},"results":[]}]}\n' > semgrep.sarif
           fi
-          chmod 644 semgrep.sarif  # sin sudo: el runner ya es owner del workspace
+          # chmod removido: el archivo ya es propiedad del runner y tiene permisos correctos
 
       - name: Upload Semgrep SARIF
         # github/codeql-action codeql-bundle-v2.21.4 — SHA verificado con gh api
@@ -303,7 +303,7 @@ jobs:
           path: |
             sbom.spdx.json
             sbom.cyclonedx.json
-          retention-days: 365
+          retention-days: 7
 
       # ──────────────────────────────────────────────────────────────────────
       # FASE 8: AI Security Audit (Groq)
@@ -337,7 +337,7 @@ jobs:
         with:
           name: ai-audit-${{ github.sha }}
           path: ai-audit-report.md
-          retention-days: 90
+          retention-days: 7
 
       # ──────────────────────────────────────────────────────────────────────
       # FASE 9: SECURITY SCORE & SUMMARY
@@ -438,4 +438,4 @@ jobs:
         with:
           name: audit-log-${{ github.sha }}
           path: audit-log.json
-          retention-days: 365
+          retention-days: 7
