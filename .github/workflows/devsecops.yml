@@ -66,23 +66,22 @@ jobs:
         with:
           args: --severity-threshold=high --json-file-output=snyk-results.json
 
-      # ========================================
+    # ========================================
       # FASE 3: SAST (Static Analysis)
       # ========================================
       - name: 🎯 Semgrep SAST Scan
         id: semgrep
         uses: semgrep/semgrep-action@v1
         with:
+          args: semgrep ci --sarif --output=semgrep.sarif
           config: >-
             p/owasp-top-ten
             p/php
             p/security-audit
-        env:
-          SEMGREP_SARIF_JSON: "1" 
 
       - name: Upload Semgrep SARIF
         uses: github/codeql-action/upload-sarif@v4
-        if: always()
+        if: always() # Importante: subir resultados aunque haya hallazgos
         with:
           sarif_file: semgrep.sarif
 
