@@ -190,14 +190,16 @@ jobs:
         id: start_app
         if: github.event_name == 'push'
         run: |
-          docker run -d --name weather-api-dast -p 8080:9000 weather-api:${{ github.sha }}
-          timeout 30 bash -c 'until docker exec weather-api-dast sh -c "SCRIPT_NAME=/ping SCRIPT_FILENAME=/ping REQUEST_METHOD=GET cgi-fcgi -bind -connect 127.0.0.1:9000" 2>/dev/null; do sleep 2; done'
-          echo "✅ App lista para DAST"
+          # Usamos --network host para que el puerto 8080 sea realmente localhost
+          docker run -d --name weather-api-dast --network host weather-api:${{ github.sha }}
+          
+          # Esperamos a que la app responda (cambiamos el check a uno más simple si es necesario)
+          timeout 60 bash -c 'until curl -s http://localhost:8080 > /dev/null; do sleep 2; echo "Esperando app..."; done'
+          echo "✅ App lista en http://localhost:8080"
 
       - name: 🦅 StackHawk DAST Scan
         id: stackhawk
         env:
-          # AHORA COINCIDE CON EL .YML
           HAWK_APP_ID: ${{ secrets.HAWK_APP_ID }} 
           APP_ENV: ci
           APP_HOST: http://localhost:8080
@@ -211,7 +213,6 @@ jobs:
         with:
           apiKey: ${{ env.HAWK_TOKEN }}
           configurationFiles: .stackhawk.yml
-
       - name: 🛑 Stop DAST App
         if: always() && github.event_name == 'push'
         run: docker rm -f weather-api-dast 2>/dev/null || true
