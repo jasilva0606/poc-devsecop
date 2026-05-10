@@ -18,19 +18,19 @@ on:
 #     reemplazados por código malicioso (infostealer de secrets de CI/CD).
 #     Ver: https://github.com/aquasecurity/trivy/discussions/10425
 #
-#     USO OBLIGATORIO: trivy-action@v0.36.0 (ed142fd) — primer release
-#     post-incidente verificado y marcado como inmutable por Aqua Security.
+#     USO OBLIGATORIO: trivy-action@v0.36.0 — primer release post-incidente.
+#     SHA verificado: a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8
 #     NUNCA usar @master, @main, ni tags anteriores a v0.35.0.
 #
-# SHA map (actualizar mensualmente con update-action-pins.sh):
-#   actions/checkout@v4.2.2              → 11bd71901bbe5b1630ceea73d27597364c9af683
-#   actions/upload-artifact@v4.6.2       → 6f51ac03b9356f520e9adb1b1b7802705f340c2b
-#   github/codeql-action/upload-sarif@v3 → 4f3212b61783c3c68e8309a0f18a699764811cda
-#   shivammathur/setup-php@v2            → (rolling tag — mantenido por el autor, bajo riesgo)
-#   gitleaks/gitleaks-action@v2.3.9      → ff98106e4c7b2bc287b24eaf42907196329070c7
-#   trufflesecurity/trufflehog@v3.94.0   → 6c64db9d8b4c7c3ebde9e29d2dad0d9d3bad6dd8  (SHA aproximado — verificar)
-#   aquasecurity/trivy-action@v0.36.0    → ed142fdc5d9e7f2ca4517a91b6c4ae30b30e40c8
-#   bridgecrewio/checkov-action@v12.3075.0 → 02a4c5d8571836b3de83780c43c8d7e2e48e6f1
+# SHA map — VERIFICADOS con `gh api` el 2026-05-10 (actualizar con update-action-pins.sh):
+#   actions/checkout@v4.2.2                → 11bd71901bbe5b1630ceea73d27597364c9af683
+#   actions/upload-artifact@v4.6.2         → ea165f8d65b6e75b540449e92b4886f43607fa02
+#   github/codeql-action@codeql-bundle-v2.21.4 → bc02a25f6449997c5e9d5a368879b28f56ae19a1
+#   shivammathur/setup-php@v2              → (rolling tag — mantenido por el autor, bajo riesgo)
+#   gitleaks/gitleaks-action@v2.3.9        → ff98106e4c7b2bc287b24eaf42907196329070c7
+#   trufflesecurity/trufflehog@v3.94.3     → 47e7b7cd74f578e1e3145d48f669f22fd1330ca6
+#   aquasecurity/trivy-action@v0.36.0      → a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8
+#   bridgecrewio/checkov-action@v12.3075.0 → 02a4c5d6a02367e5ea493c34c26b094302fd3f61
 # ─────────────────────────────────────────────────────────────────────────────
 
 env:
@@ -94,9 +94,8 @@ jobs:
 
       - name: 🔍 TruffleHog Secret Scan
         id: trufflehog
-        # trufflehog v3.94.0 — SHA verificado en https://github.com/trufflesecurity/trufflehog/releases/tag/v3.94.0
-        # NOTA: trufflesecurity recomienda referenciar por tag versionado (v3.x.y), NUNCA @main
-        uses: trufflesecurity/trufflehog@6c64db9d8b4c7c3ebde9e29d2dad0d9d3bad6dd8
+        # trufflesecurity/trufflehog v3.94.3 — SHA verificado con gh api
+        uses: trufflesecurity/trufflehog@47e7b7cd74f578e1e3145d48f669f22fd1330ca6
         with:
           path: ./
           extra_args: --results=verified,unknown
@@ -120,19 +119,35 @@ jobs:
 
       - name: 📦 Snyk Dependency Scan (SCA)
         id: snyk
-        # snyk/actions/php — usar versión semántica; Snyk no publica SHAs por tag fácilmente
-        # Para producción con alto riesgo, usar `snyk test` como CLI en vez de la action
-        uses: snyk/actions/php@master
+        # NOTA: snyk/actions no publica tags con SHA pinnable (usa @master internamente).
+        # Se usa la CLI directa instalada con checksum verificado — más seguro y auditable.
+        # Ver: https://docs.snyk.io/developer-tools/snyk-ci-cd-integrations/snyk-images-guides-to-migration/github-actions-migration
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        with:
-          args: --severity-threshold=high --json-file-output=snyk-results.json
-        # Gate duro para main: sin continue-on-error
+        run: |
+          # Descargar CLI + verificar checksum antes de ejecutar
+          SNYK_VERSION="v1.1296.2"
+          curl -sSL "https://downloads.snyk.io/cli/${SNYK_VERSION}/snyk-linux"        -o snyk
+          curl -sSL "https://downloads.snyk.io/cli/${SNYK_VERSION}/snyk-linux.sha256" -o snyk.sha256
+          sha256sum -c snyk.sha256
+          chmod +x snyk
+          sudo mv snyk /usr/local/bin/snyk
+
+          snyk test \
+            --severity-threshold=high \
+            --json > snyk-results.json || SNYK_EXIT=$?
+
+          # Exit 1 = vulnerabilidades encontradas (gate duro), 2+ = error de configuración
+          if [ "${SNYK_EXIT:-0}" -eq 2 ] || [ "${SNYK_EXIT:-0}" -ge 3 ]; then
+            echo "::error::Snyk falló por error de configuración (exit ${SNYK_EXIT})"
+            exit "${SNYK_EXIT}"
+          fi
+          exit "${SNYK_EXIT:-0}"
 
       - name: Upload Snyk Results
         if: always() && hashFiles('snyk-results.json') != ''
-        # actions/upload-artifact v4.6.2 — SHA verificado en https://github.com/actions/upload-artifact/releases/tag/v4.6.2
-        uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b
+        # actions/upload-artifact v4.6.2 — SHA verificado con gh api
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: snyk-results-${{ github.sha }}
           path: snyk-results.json
@@ -169,8 +184,8 @@ jobs:
           chmod 644 semgrep.sarif  # sin sudo: el runner ya es owner del workspace
 
       - name: Upload Semgrep SARIF
-        # github/codeql-action/upload-sarif v3 — SHA verificado
-        uses: github/codeql-action/upload-sarif@4f3212b61783c3c68e8309a0f18a699764811cda
+        # github/codeql-action codeql-bundle-v2.21.4 — SHA verificado con gh api
+        uses: github/codeql-action/upload-sarif@bc02a25f6449997c5e9d5a368879b28f56ae19a1
         if: always()
         with:
           sarif_file: semgrep.sarif
@@ -181,8 +196,8 @@ jobs:
       # ──────────────────────────────────────────────────────────────────────
       - name: 🏗️ Checkov Dockerfile & Actions Scan
         id: checkov
-        # checkov-action v12.3075.0 — SHA verificado en https://github.com/bridgecrewio/checkov-action/tags
-        uses: bridgecrewio/checkov-action@02a4c5d8571836b3de83780c43c8d7e2e48e6f1
+        # bridgecrewio/checkov-action v12.3075.0 — SHA verificado con gh api
+        uses: bridgecrewio/checkov-action@02a4c5d6a02367e5ea493c34c26b094302fd3f61
         with:
           directory: .
           skip_path: vendor
@@ -192,7 +207,7 @@ jobs:
           soft_fail: false  # Gate duro: IaC failures bloquean el build
 
       - name: Upload Checkov SARIF
-        uses: github/codeql-action/upload-sarif@4f3212b61783c3c68e8309a0f18a699764811cda
+        uses: github/codeql-action/upload-sarif@bc02a25f6449997c5e9d5a368879b28f56ae19a1
         if: always()
         with:
           sarif_file: checkov.sarif
@@ -209,15 +224,9 @@ jobs:
 
       - name: 🛡️ Trivy Container Scan
         id: trivy
-        # ⚠️  CRÍTICO — INCIDENTE DE SUPPLY CHAIN (Marzo 2026):
-        # aquasecurity/trivy-action fue comprometido. 75 de 76 tags apuntaron
-        # a un infostealer que robaba secrets de CI/CD.
-        # Ver: https://github.com/aquasecurity/trivy/discussions/10425
-        #      https://thehackernews.com/2026/03/trivy-security-scanner-github-actions.html
-        #
-        # v0.36.0 (ed142fd) es el primer release POST-INCIDENTE, verificado e inmutable.
-        # SHA verificado en: https://github.com/aquasecurity/trivy-action/releases/tag/v0.36.0
-        uses: aquasecurity/trivy-action@ed142fdc5d9e7f2ca4517a91b6c4ae30b30e40c8
+        # aquasecurity/trivy-action v0.36.0 — SHA verificado con gh api
+        # ⚠️  Post-incidente supply chain Marzo 2026 (ver comentario en cabecera del archivo)
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8
         with:
           image-ref: 'weather-api:${{ github.sha }}'
           format: 'sarif'
@@ -227,7 +236,7 @@ jobs:
           ignore-unfixed: false
 
       - name: Upload Trivy SARIF
-        uses: github/codeql-action/upload-sarif@4f3212b61783c3c68e8309a0f18a699764811cda
+        uses: github/codeql-action/upload-sarif@bc02a25f6449997c5e9d5a368879b28f56ae19a1
         if: always()  # Subir SARIF aunque Trivy haya fallado el job
         with:
           sarif_file: 'trivy-results.sarif'
@@ -282,7 +291,7 @@ jobs:
 
       - name: Upload SBOM
         if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: sbom-${{ github.sha }}
           path: |
@@ -318,7 +327,7 @@ jobs:
 
       - name: Upload AI Audit Report
         if: always() && hashFiles('ai-audit-report.md') != ''
-        uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: ai-audit-${{ github.sha }}
           path: ai-audit-report.md
@@ -418,7 +427,7 @@ jobs:
           cat audit-log.json
 
       - name: 📤 Upload Audit Log
-        uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
           name: audit-log-${{ github.sha }}
