@@ -1,39 +1,26 @@
 #!/usr/bin/env bash
 # .github/scripts/update-action-pins.sh
-#
-# Utilitario para actualizar los SHAs de las GitHub Actions pinneadas.
-# Ejecutar manualmente o en un workflow de mantenimiento mensual.
-#
-# Requisitos: gh CLI autenticado, jq
-#
-# Uso:
-#   chmod +x .github/scripts/update-action-pins.sh
-#   ./.github/scripts/update-action-pins.sh
-#   # Revisar el diff generado y hacer commit
 
 set -euo pipefail
 
 WORKFLOW_FILE=".github/workflows/devsecops.yml"
 
+# Validaciones iniciales
 if [ ! -f "$WORKFLOW_FILE" ]; then
   echo "❌ No se encontró $WORKFLOW_FILE"
   exit 1
 fi
 
 if ! command -v gh &>/dev/null; then
-  echo "❌ gh CLI no está instalado. Ver: https://cli.github.com"
-  exit 1
-fi
-
-if ! command -v jq &>/dev/null; then
-  echo "❌ jq no está instalado."
+  echo "❌ gh CLI no está instalado."
   exit 1
 fi
 
 echo "🔍 Actualizando SHAs de GitHub Actions en $WORKFLOW_FILE"
-echo ""
 
-# Lista de actions a verificar: "owner/repo:tag_or_branch"
+# Lista de actions: "owner/repo:tag"
+# Nota: Para acciones con subdirectorios (como snyk/actions/php), 
+# se define el repo base y el script resuelve el SHA del commit raíz.
 declare -a ACTIONS=(
   "actions/checkout:v4"
   "actions/upload-artifact:v4"
@@ -42,8 +29,8 @@ declare -a ACTIONS=(
   "gitleaks/gitleaks-action:v2"
   "trufflesecurity/trufflehog:v3"
   "snyk/actions:v0"
-  "bridgecrewio/checkov-action:master"
-  "aquasecurity/trivy-action:master"
+  "bridgecrewio/checkov-action:main"
+  "aquasecurity/trivy-action:main"
   "stackhawk/hawkscan-action:v2"
 )
 
@@ -51,47 +38,33 @@ for action_ref in "${ACTIONS[@]}"; do
   owner_repo="${action_ref%%:*}"
   tag="${action_ref##*:}"
 
-  echo "  📌 $owner_repo @ $tag"
+  echo "  📌 Buscando SHA para $owner_repo @ $tag..."
 
-  # Obtener SHA del tag/branch via API de GitHub
-  sha=$(gh api "repos/$owner_repo/git/ref/tags/$tag" --jq '.object.sha' 2>/dev/null \
-    || gh api "repos/$owner_repo/git/ref/heads/$tag" --jq '.object.sha' 2>/dev/null \
-    || echo "")
-
-  # Si el ref apunta a un tag object (annotated tag), resolver al commit
-  if [ -n "$sha" ]; then
-    obj_type=$(gh api "repos/$owner_repo/git/tags/$sha" --jq '.object.type' 2>/dev/null || echo "")
-    if [ "$obj_type" = "commit" ]; then
-      sha=$(gh api "repos/$owner_repo/git/tags/$sha" --jq '.object.sha' 2>/dev/null || echo "$sha")
-    fi
-  fi
+  # 1. Intentar obtener el SHA del commit directamente (funciona para branches y tags)
+  # Usamos 'rev-parse' via API para obtener el commit final real
+  sha=$(gh api "repos/$owner_repo/commits/$tag" --jq '.sha' 2>/dev/null || echo "")
 
   if [ -z "$sha" ]; then
-    echo "    ⚠️  No se pudo obtener SHA para $owner_repo:$tag — saltando"
+    echo "    ⚠️  No se pudo resolver $owner_repo:$tag — saltando"
     continue
   fi
 
-  echo "    SHA: $sha"
+  echo "    ✅ Commit SHA: $sha"
 
-  # Reemplazar en el archivo de workflow
-  # Busca patrones como: uses: owner/repo/subdir@SHA o uses: owner/repo@SHA
-  # con comentario de version opcionalmente
-  sed -i.bak \
-    "s|uses: ${owner_repo}[^@]*@[a-f0-9]\{40\}|uses: ${owner_repo}@${sha}|g" \
-    "$WORKFLOW_FILE"
-
+  # 2. Reemplazo con sed (Optimizado)
+  # Esta regex busca 'uses: owner/repo' seguido de '@' y cualquier SHA de 40 caracteres,
+  # respetando si hay subdirectorios como 'owner/repo/subdir@SHA'
+  # El uso de [^ ]* permite capturar subdirectorios antes del @
+  
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    # Versión para macOS (BSD sed)
+    sed -i '' "s|\(uses: ${owner_repo}[^@]*\)@[a-f0-9]\{40\}|\1@${sha}|g" "$WORKFLOW_FILE"
+  else
+    # Versión para Linux (GNU sed)
+    sed -i "s|\(uses: ${owner_repo}[^@]*\)@[a-f0-9]\{40\}|\1@${sha}|g" "$WORKFLOW_FILE"
+  fi
 done
 
-# Limpiar backups de sed
-rm -f "${WORKFLOW_FILE}.bak"
-
 echo ""
-echo "✅ SHAs actualizados. Revisar el diff:"
-echo ""
-git diff "$WORKFLOW_FILE" 2>/dev/null || diff /dev/null /dev/null
-
-echo ""
-echo "📝 Próximos pasos:"
-echo "   1. Revisar los cambios con: git diff $WORKFLOW_FILE"
-echo "   2. Hacer commit: git add $WORKFLOW_FILE && git commit -m 'chore: update action pins'"
-echo "   3. Abrir PR para revisión"
+echo "✅ SHAs actualizados correctamente en $WORKFLOW_FILE"
+echo "📝 Ejecuta 'git diff' para verificar los cambios."

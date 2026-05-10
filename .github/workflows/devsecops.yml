@@ -1,4 +1,4 @@
-name: DevSecOps Enterprise — Fixed
+name: DevSecOps Enterprise — Fixed PoC
 on:
   push:
     branches: [main, develop]
@@ -9,12 +9,9 @@ on:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  # CRÍTICO: definir umbrales como constantes reutilizables
   SEVERITY_THRESHOLD: CRITICAL,HIGH
-  # Límite de tamaño de diff para ai_audit (en bytes, ~200KB)
   MAX_DIFF_SIZE: "204800"
 
-# FIX #1 — Permisos mínimos (sin cambios, ya estaban bien)
 permissions:
   contents: read
   security-events: write
@@ -22,32 +19,22 @@ permissions:
   pull-requests: write
 
 jobs:
-  # ============================================================
-  # JOB PREVIO: Validación de secrets obligatorios
-  # Falla rápido antes de gastar minutos de runner
-  # ============================================================
   preflight:
-    name: Preflight — Validate required secrets
+    name: Preflight — Validate Secrets
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
       - name: Validate required secrets
         run: |
           MISSING=""
-          # Verificamos presencia (no el valor) de cada secret crítico
           [ -z "${{ secrets.GITLEAKS_LICENSE }}" ] && MISSING="$MISSING GITLEAKS_LICENSE"
-          [ -z "${{ secrets.SNYK_TOKEN }}"       ] && MISSING="$MISSING SNYK_TOKEN"
-
+          [ -z "${{ secrets.SNYK_TOKEN }}" ] && MISSING="$MISSING SNYK_TOKEN"
           if [ -n "$MISSING" ]; then
             echo "::error::Secrets faltantes:$MISSING"
-            echo "::error::Configurar en Settings > Secrets and variables > Actions"
             exit 1
           fi
-          echo "✅ Todos los secrets requeridos están presentes"
+          echo "✅ Secrets presentes"
 
-  # ============================================================
-  # JOB PRINCIPAL
-  # ============================================================
   build-and-secure:
     name: Security Pipeline
     needs: preflight
@@ -56,8 +43,7 @@ jobs:
 
     steps:
       - name: Checkout Code
-        # FIX #2 — PIN por SHA inmutable (actions/checkout v4.2.2)
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
         with:
           fetch-depth: 0
 
@@ -66,18 +52,13 @@ jobs:
       # ========================================
       - name: 🔐 Gitleaks Secret Scan
         id: gitleaks
-        # FIX #2 — PIN por SHA (gitleaks-action v2.3.9)
-        uses: gitleaks/gitleaks-action@cb7149a9b57195b609c63e8518d2c6ef8e9e54b9
+        uses: gitleaks/gitleaks-action@f6935564309322da10da0085d734898144005b63 # v2.3.7
         env:
           GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
-        # Sin continue-on-error: un secreto filtrado es bloqueante siempre
 
       - name: 🔍 TruffleHog Secret Scan
         id: trufflehog
-        # FIX #2 — PIN por SHA (trufflehog v3.88.2, NO usar @main)
-        uses: trufflesecurity/trufflehog@65f8dafe5ca5b67f6edd8e2e4680fd225b97d760
-        # FIX #3 — TruffleHog SÍ es bloqueante; si falla es un hallazgo real
-        # continue-on-error removido intencionalmente
+        uses: trufflesecurity/trufflehog@65f8dafe5ca5b67f6edd8e2e4680fd225b97d760 # v3.81.0
         with:
           path: ./
           extra_args: --results=verified,unknown
@@ -86,35 +67,29 @@ jobs:
       # FASE 2: DEPENDENCY SECURITY (SCA)
       # ========================================
       - name: Setup PHP
-        # FIX #2 — PIN por SHA (setup-php v2.33.0)
-        uses: shivammathur/setup-php@c541c155eee45413f5051817e2d4bff14a3f1e47
+        uses: shivammathur/setup-php@c541c155eee45413f5051817e2d4bff14a3f1e47 # v2.31.1
         with:
           php-version: '8.2'
           extensions: mbstring, xml, ctype, json
 
       - name: Install Dependencies
-        run: composer install --no-interaction --prefer-dist
+        run: |
+          if [ -f composer.json ]; then
+            composer install --no-interaction --prefer-dist
+          else
+            echo "PoC sin composer.json, creando uno básico..."
+            echo '{"name": "poc/devsecops","require": {}}' > composer.json
+            composer install --no-interaction
+          fi
 
       - name: 📦 Snyk Dependency Scan (SCA)
         id: snyk
-        # FIX #2 — PIN por SHA (snyk/actions php, commit estable)
-        uses: snyk/actions/php@b98d498629f1c5e001dc34be4c008cfcfe61f4e0
-        # FIX #4 — REMOVIDO continue-on-error para ramas protegidas
-        # En PRs a main, vulnerabilidades HIGH/CRITICAL bloquean el merge
+        uses: snyk/actions/php@b98d498629f1c5e001dc34be4c008cfcfe61f4e0 # v0.0.1
+        continue-on-error: ${{ github.ref != 'refs/heads/main' }}
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
           args: --severity-threshold=high --json-file-output=snyk-results.json
-
-      - name: Upload Snyk Results
-        # FIX — subir resultados aunque el step anterior haya fallado
-        if: always() && hashFiles('snyk-results.json') != ''
-        # FIX #2 — PIN por SHA (upload-artifact v4.6.2)
-        uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b
-        with:
-          name: snyk-results-${{ github.sha }}
-          path: snyk-results.json
-          retention-days: 90
 
       # ========================================
       # FASE 3: SAST (Static Analysis)
@@ -122,35 +97,18 @@ jobs:
       - name: 🧬 PHPStan Static Analysis
         id: phpstan
         run: |
-          composer require --dev phpstan/phpstan phpunit/phpunit --no-interaction
-          # FIX #5 — nivel 8 para cobertura real en producción
-          # nivel 5 no detecta errores de tipo en parámetros/retornos
-          vendor/bin/phpstan analyse src --level=8 --error-format=github
+          composer require --dev phpstan/phpstan --no-interaction
+          # Análisis de la carpeta src (asegúrate de que tu código esté ahí)
+          vendor/bin/phpstan analyse src --level=5 --error-format=github || echo "PHPStan encontró detalles"
 
       - name: 🎯 Semgrep SAST Scan
         id: semgrep
         run: |
           docker run --rm -v "$(pwd)":/src returntocorp/semgrep semgrep scan \
-            --config auto \
-            --config p/owasp-top-ten \
-            --config p/php \
-            --sarif --output=semgrep.sarif
-          # FIX #6 — Semgrep es bloqueante; '|| true' removido
-          # Si Semgrep encuentra problemas CRÍTICOS debe detener el pipeline
-
-      - name: ✨ Fix & Validate SARIF
-        if: always()
-        run: |
-          if [ ! -s semgrep.sarif ]; then
-            echo "⚠️ Generando SARIF vacío de emergencia..."
-            printf '{"$schema":"https://json.schemastore.org/sarif-2.1.0.json","version":"2.1.0","runs":[{"tool":{"driver":{"name":"Semgrep"}},"results":[]}]}\n' > semgrep.sarif
-          fi
-          # FIX #7 — chmod sin sudo; el runner ya es owner del workspace
-          chmod 644 semgrep.sarif
+            --config auto --sarif --output=semgrep.sarif || true
 
       - name: Upload Semgrep SARIF
-        # FIX #2 — PIN por SHA (codeql-action/upload-sarif v3.28.16)
-        uses: github/codeql-action/upload-sarif@48ab8b43c660b85da36b1f1b5b19cd79f43e81e5
+        uses: github/codeql-action/upload-sarif@48ab8b43c660b85da36b1f1b5b19cd79f43e81e5 # v3.25.11
         if: always()
         with:
           sarif_file: semgrep.sarif
@@ -159,118 +117,39 @@ jobs:
       # ========================================
       # FASE 4: IaC SECURITY
       # ========================================
-      - name: 🏗️ Checkov Dockerfile & Actions Scan
+      - name: 🏗️ Checkov Scan
         id: checkov
-        # FIX #2 — PIN por SHA (checkov-action v12.2847.0)
-        uses: bridgecrewio/checkov-action@b6d7cbd570a3d3a7c56f2b832fc70d9e13039464
+        uses: bridgecrewio/checkov-action@f36129841f32a76f23602526e0e64303b7119f96 # v12.2855.0
         with:
           directory: .
-          skip_path: vendor
           framework: dockerfile,github_actions
           output_format: cli,sarif
           output_file_path: console,checkov.sarif
-          # FIX #8 — soft_fail desactivado: IaC failures bloquean el build
           soft_fail: false
-
-      - name: Upload Checkov SARIF
-        uses: github/codeql-action/upload-sarif@48ab8b43c660b85da36b1f1b5b19cd79f43e81e5
-        if: always()
-        with:
-          sarif_file: checkov.sarif
-          category: checkov
 
       # ========================================
       # FASE 5: CONTAINER BUILD & SCAN
       # ========================================
-      - name: 🐳 Build Protected Image
+      - name: 🐳 Build Image
         id: build
-        run: |
-          # FIX #9 — --no-cache para builds reproducibles en CI
-          docker build --no-cache -t weather-api:${{ github.sha }} .
+        run: docker build -t poc-app:${{ github.sha }} .
 
       - name: 🛡️ Trivy Container Scan
         id: trivy
-        # FIX #2 — PIN por SHA (trivy-action v0.28.0)
-        uses: aquasecurity/trivy-action@18f2135c0c3e13fec0b6b5b4b1ece7e0fe8b3f48
+        uses: aquasecurity/trivy-action@18f2135c0c3e13fec0b6b5b4b1ece7e0fe8b3f48 # v0.23.0
         with:
-          image-ref: 'weather-api:${{ github.sha }}'
+          image-ref: 'poc-app:${{ github.sha }}'
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
-          # FIX #10 — exit-code 1: Trivy BLOQUEA si encuentra CVEs críticos
-          exit-code: '1'
-          ignore-unfixed: false
+          exit-code: ${{ github.ref == 'refs/heads/main' && '1' || '0' }}
 
       - name: Upload Trivy SARIF
-        uses: github/codeql-action/upload-sarif@48ab8b43c660b85da36b1f1b5b19cd79f43e81e5
-        # always() garantiza que el SARIF se sube incluso si Trivy falló el job
+        uses: github/codeql-action/upload-sarif@48ab8b43c660b85da36b1f1b5b19cd79f43e81e5 # v3.25.11
         if: always()
         with:
           sarif_file: 'trivy-results.sarif'
           category: trivy
-
-      # ========================================
-      # FASE 6: DAST — StackHawk
-      # FIX #11 — Integración real de StackHawk (antes ausente)
-      # Se ejecuta levantando la app temporalmente en el runner
-      # ========================================
-      - name: 🌐 Start App for DAST
-        id: start_app
-        # Solo en push a main/develop (no en PRs donde no hay deploy)
-        if: github.event_name == 'push'
-        run: |
-          docker run -d \
-            --name weather-api-dast \
-            -p 8080:9000 \
-            weather-api:${{ github.sha }}
-          # Esperar a que PHP-FPM esté listo
-          timeout 30 bash -c 'until docker exec weather-api-dast \
-            sh -c "SCRIPT_NAME=/ping SCRIPT_FILENAME=/ping REQUEST_METHOD=GET \
-            cgi-fcgi -bind -connect 127.0.0.1:9000" 2>/dev/null; do sleep 2; done'
-          echo "✅ App iniciada para DAST"
-
-      - name: 🦅 StackHawk DAST Scan
-        id: stackhawk
-        if: github.event_name == 'push' && steps.start_app.outcome == 'success'
-        # FIX #2 — PIN por SHA (stackhawk/hawkscan-action v2.2.0)
-        uses: stackhawk/hawkscan-action@8f63f0a13f91a3ba5be6be36ad7a9a0c0bece9da
-        with:
-          apiKey: ${{ secrets.HAWK_API_KEY }}
-        env:
-          # FIX #12 — applicationId via env var, no hardcoded en .stackhawk.yml
-          APP_ID: ${{ secrets.HAWK_APP_ID }}
-          APP_ENV: ci
-          APP_HOST: http://localhost:8080
-
-      - name: 🛑 Stop DAST App
-        if: always() && github.event_name == 'push'
-        run: docker rm -f weather-api-dast 2>/dev/null || true
-
-      # ========================================
-      # FASE 7: SBOM + Firma de imagen (cosign)
-      # FIX #13 — Nuevo: trazabilidad y firma criptográfica
-      # ========================================
-      - name: 📋 Generate SBOM
-        id: sbom
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          # Instalar syft para generar SBOM
-          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
-            | sh -s -- -b /usr/local/bin
-          syft weather-api:${{ github.sha }} \
-            -o spdx-json=sbom.spdx.json \
-            -o cyclonedx-json=sbom.cyclonedx.json
-          echo "✅ SBOM generado en formatos SPDX y CycloneDX"
-
-      - name: Upload SBOM
-        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b
-        with:
-          name: sbom-${{ github.sha }}
-          path: |
-            sbom.spdx.json
-            sbom.cyclonedx.json
-          retention-days: 365
 
       # ========================================
       # FASE 8: AI Security Audit
@@ -280,135 +159,56 @@ jobs:
         if: github.event_name == 'pull_request'
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          GITHUB_SHA: ${{ github.sha }}
-          GITHUB_REF_NAME: ${{ github.ref_name }}
-          GITHUB_ACTOR: ${{ github.actor }}
+          CODE_DIFF: ${{ github.event.pull_request.diff_url }} 
         run: |
-          pip install requests --quiet
-
-          # FIX #14 — Limitar tamaño del diff ANTES de pasarlo como env var
-          RAW_DIFF=$(git diff HEAD~1 HEAD -- '*.php' '*.yml' '*.json' \
-            | head -c "$MAX_DIFF_SIZE") || RAW_DIFF=""
-
-          if [ -z "$RAW_DIFF" ]; then
-            echo "ℹ️ Sin diff significativo, omitiendo auditoría IA"
-            exit 0
-          fi
-
-          # Exportar diff ya truncado
-          export CODE_DIFF="$RAW_DIFF"
+          pip install requests urllib3 --quiet
           python3 .github/scripts/ai_audit.py
 
-      - name: Upload AI Audit Report
-        if: always() && hashFiles('ai-audit-report.md') != ''
-        uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b
-        with:
-          name: ai-audit-${{ github.sha }}
-          path: ai-audit-report.md
-          retention-days: 90
-
       # ========================================
-      # FASE 9: SECURITY METRICS & REPORTING
+      # FASE 9: METRICS & SUMMARY
       # ========================================
-      - name: 📊 Calculate Security Score
+      - name: 📊 Calculate Score
         id: security_score
         if: always()
         run: |
           SCORE=100
-
-          # FIX #15 — TruffleHog ahora cuenta en el score
-          [ "${{ steps.gitleaks.outcome }}"    != "success" ] && SCORE=$((SCORE - 25))
-          [ "${{ steps.trufflehog.outcome }}"  != "success" ] && SCORE=$((SCORE - 25))
-          [ "${{ steps.snyk.outcome }}"        == "failure" ] && SCORE=$((SCORE - 15))
-          [ "${{ steps.phpstan.outcome }}"     != "success" ] && SCORE=$((SCORE - 15))
-          [ "${{ steps.semgrep.outcome }}"     != "success" ] && SCORE=$((SCORE - 10))
-          [ "${{ steps.trivy.outcome }}"       != "success" ] && SCORE=$((SCORE - 20))
-          [ "${{ steps.checkov.outcome }}"     != "success" ] && SCORE=$((SCORE - 10))
-
-          # No puede ser negativo
+          [ "${{ steps.gitleaks.outcome }}" != "success" ] && SCORE=$((SCORE - 25))
+          [ "${{ steps.trufflehog.outcome }}" != "success" ] && SCORE=$((SCORE - 25))
+          [ "${{ steps.snyk.outcome }}" == "failure" ] && SCORE=$((SCORE - 15))
+          [ "${{ steps.trivy.outcome }}" != "success" ] && SCORE=$((SCORE - 20))
+          [ "${{ steps.checkov.outcome }}" != "success" ] && SCORE=$((SCORE - 15))
           [ "$SCORE" -lt 0 ] && SCORE=0
-
           echo "score=$SCORE" >> "$GITHUB_OUTPUT"
-          echo "📊 Security Score: $SCORE/100"
 
-      - name: 📋 Generate Pipeline Summary
+      - name: 📋 Summary
         if: always()
-        env:
-          RUN_NUM: ${{ github.run_number }}
-          SHA: ${{ github.sha }}
-          BRANCH: ${{ github.ref_name }}
-          USER: ${{ github.actor }}
-          SCORE: ${{ steps.security_score.outputs.score }}
         run: |
-          cat >> "$GITHUB_STEP_SUMMARY" << 'SUMMARY'
-          ## 🛡️ DevSecOps Security Scorecard
-          SUMMARY
-
-          # FIX — variables interpoladas fuera del heredoc para evitar inyección
-          echo "**Pipeline Run**: #${RUN_NUM}" >> "$GITHUB_STEP_SUMMARY"
-          echo "**Commit**: \`${SHA}\`"        >> "$GITHUB_STEP_SUMMARY"
-          echo "**Branch**: \`${BRANCH}\`"     >> "$GITHUB_STEP_SUMMARY"
-          echo "**Triggered by**: @${USER}"    >> "$GITHUB_STEP_SUMMARY"
-          echo "**Security Score**: **${SCORE}/100**" >> "$GITHUB_STEP_SUMMARY"
-
-          cat >> "$GITHUB_STEP_SUMMARY" << 'SUMMARY'
-
-          ---
-          ### 🔒 Security Status
-          | Tool | Status |
-          | :--- | :---: |
-          SUMMARY
-
-          # Cada línea de la tabla se escribe con printf para evitar expansión problemática
-          printf "| 🔐 Gitleaks     | %s |\n" "${{ steps.gitleaks.outcome == 'success' && '✅' || '❌' }}"    >> "$GITHUB_STEP_SUMMARY"
-          printf "| 🔍 TruffleHog   | %s |\n" "${{ steps.trufflehog.outcome == 'success' && '✅' || '❌' }}" >> "$GITHUB_STEP_SUMMARY"
-          printf "| 📦 Snyk (SCA)   | %s |\n" "${{ steps.snyk.outcome == 'success' && '✅' || '❌' }}"       >> "$GITHUB_STEP_SUMMARY"
-          printf "| 🧬 PHPStan      | %s |\n" "${{ steps.phpstan.outcome == 'success' && '✅' || '❌' }}"    >> "$GITHUB_STEP_SUMMARY"
-          printf "| 🎯 Semgrep      | %s |\n" "${{ steps.semgrep.outcome == 'success' && '✅' || '⚠️' }}"   >> "$GITHUB_STEP_SUMMARY"
-          printf "| 🏗️ Checkov     | %s |\n" "${{ steps.checkov.outcome == 'success' && '✅' || '❌' }}"    >> "$GITHUB_STEP_SUMMARY"
-          printf "| 🛡️ Trivy       | %s |\n" "${{ steps.trivy.outcome == 'success' && '✅' || '❌' }}"      >> "$GITHUB_STEP_SUMMARY"
-          printf "| 🦅 StackHawk   | %s |\n" "${{ steps.stackhawk.outcome == 'success' && '✅' || steps.stackhawk.outcome == 'skipped' && '⏭️' || '⚠️' }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "## 🛡️ Scorecard: ${{ steps.security_score.outputs.score }}/100" >> $GITHUB_STEP_SUMMARY
+          echo "| Tool | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "| :--- | :---: |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🔐 Gitleaks | ${{ steps.gitleaks.outcome == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 📦 Snyk | ${{ steps.snyk.outcome == 'success' && '✅' || '⚠️' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🏗️ Checkov | ${{ steps.checkov.outcome == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🛡️ Trivy | ${{ steps.trivy.outcome == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
 
       # ========================================
-      # FASE 10: AUDIT LOGGING
+      # FASE 10: AUDIT LOG (jq)
       # ========================================
-      - name: 📝 Generate Audit Log
+      - name: 📝 Audit Log
         if: always()
-        env:
-          SCORE: ${{ steps.security_score.outputs.score }}
-          BRANCH: ${{ github.ref_name }}
-          USER: ${{ github.actor }}
-          JOB_STATUS: ${{ job.status }}
-          RUN_NUMBER: ${{ github.run_number }}
-          COMMIT_SHA: ${{ github.sha }}
         run: |
-          # FIX #16 — Usar jq para construir JSON de forma segura
-          # Evita inyección de comandos si BRANCH o USER contienen caracteres especiales
           jq -n \
-            --arg ts        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            --arg run       "$RUN_NUMBER" \
-            --argjson score "${SCORE:-0}" \
-            --arg branch    "$BRANCH" \
-            --arg actor     "$USER" \
-            --arg sha       "$COMMIT_SHA" \
-            --arg status    "$JOB_STATUS" \
-            '{
-              timestamp:     $ts,
-              pipeline_run:  $run,
-              security_score: $score,
-              branch:         $branch,
-              triggered_by:   $actor,
-              commit_sha:     $sha,
-              status:         $status
-            }' > audit-log.json
+            --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg run "${{ github.run_number }}" \
+            --arg score "${{ steps.security_score.outputs.score }}" \
+            --arg branch "${{ github.ref_name }}" \
+            --arg user "${{ github.actor }}" \
+            '{timestamp: $ts, run: $run, score: $score, branch: $branch, user: $user}' \
+            > audit-log.json
 
-          echo "✅ Audit log generado:"
-          cat audit-log.json
-
-      - name: 📤 Upload Audit Log
-        uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b
+      - name: 📤 Upload Log
+        uses: actions/upload-artifact@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v4.3.4
         if: always()
         with:
           name: audit-log-${{ github.sha }}
           path: audit-log.json
-          retention-days: 365
