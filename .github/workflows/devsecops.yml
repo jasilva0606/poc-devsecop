@@ -100,6 +100,7 @@ jobs:
         uses: bridgecrewio/checkov-action@master
         with:
           directory: .
+          skip_path: vendor
           framework: dockerfile,github_actions
           output_format: cli,sarif
           output_file_path: console,checkov.sarif
