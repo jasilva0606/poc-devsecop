@@ -39,12 +39,11 @@ jobs:
 
       - name: 🔍 TruffleHog Secret Scan (Complementario)
         id: trufflehog
+        uses: trufflesecurity/trufflehog@v3.5.0
         continue-on-error: true
-        uses: trufflesecurity/trufflehog@main
         with:
           path: ./
-          base: ${{ github.event.repository.default_branch }}
-          head: HEAD
+          extra_args: --results=verified,unknown
 
       # ========================================
       # FASE 2: DEPENDENCY SECURITY (SCA)
