@@ -72,30 +72,28 @@ jobs:
       - name: 🎯 Semgrep SAST Scan
         id: semgrep
         uses: semgrep/semgrep-action@v1
-      with:
-        # Quitamos 'semgrep ci' y dejamos que la acción maneje el entrypoint
-        # Pero forzamos el formato y la salida
-        args: --sarif --output=semgrep.sarif
-        config: >-
-          p/owasp-top-ten
-          p/php
-          p/security-audit
+        with:
+          args: --sarif --output=semgrep.sarif
+          config: >-
+            p/owasp-top-ten
+            p/php
+            p/security-audit
 
-    - name: ✨ Fix SARIF for GitHub API
-      if: always()
-      run: |
-        if [ ! -s semgrep.sarif ]; then
-          echo "⚠️ SARIF vacío o no encontrado, generando estructura mínima válida..."
-          echo '{"$schema":"https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json","version":"2.1.0","runs":[{"tool":{"driver":{"name":"Semgrep"}},"results":[]}]}' > semgrep.sarif
-        fi
-        # Debug para ver qué vamos a subir (solo las primeras líneas)
-        head -n 20 semgrep.sarif
+      - name: ✨ Fix SARIF for GitHub API
+        if: always()
+        run: |
+          if [ ! -s semgrep.sarif ]; then
+            echo "⚠️ SARIF vacío o no encontrado, generando estructura mínima válida..."
+            echo '{"$schema":"https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json","version":"2.1.0","runs":[{"tool":{"driver":{"name":"Semgrep"}},"results":[]}]}' > semgrep.sarif
+          fi
+          # Debug para ver qué vamos a subir (solo las primeras líneas)
+          head -n 20 semgrep.sarif
 
-    - name: Upload Semgrep SARIF
-      uses: github/codeql-action/upload-sarif@v4
-      if: always()
-      with:
-        sarif_file: semgrep.sarif
+      - name: Upload Semgrep SARIF
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: semgrep.sarif
 
       # ========================================
       # FASE 4: IaC SECURITY
