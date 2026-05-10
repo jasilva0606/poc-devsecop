@@ -17,11 +17,8 @@ jobs:
 
       # 2. SAST (Análisis de código estático)
       - name: PHPStan Static Analysis
-        uses: phpstan/phpstan-action@v1
-        with:
-          version: latest
-          level: 5
-          paths: src
+        run: |
+          docker run --rm -v $(pwd):/app phpstan/phpstan analyse /app/src --level=5
 
       # 3. BUILD CON IMAGEN ULTRA-LIGHT (Alpine)
       - name: Build Protected Image
