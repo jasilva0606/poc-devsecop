@@ -9,50 +9,73 @@ jobs:
         with:
           fetch-depth: 0
 
-      # 1. SECRET SCANNING (Con blindaje de licencia)
+      # 1. SECRET SCANNING
       - name: Gitleaks Scan
+        id: gitleaks
         uses: gitleaks/gitleaks-action@v2
         env:
           GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
 
-      # 2. SAST (Análisis de código estático)
+      # 2. SAST (Análisis de código estático - Imagen actualizada de GHCR)
       - name: PHPStan Static Analysis
+        id: phpstan
         run: |
-          docker run --rm -v $(pwd):/app phpstan/phpstan analyse /app/src --level=5
+          docker run --rm -v $(pwd):/app ghcr.io/phpstan/phpstan analyse src --level=5
 
       # 3. BUILD CON IMAGEN ULTRA-LIGHT (Alpine)
       - name: Build Protected Image
+        id: build
         run: |
           docker build -t weather-api:latest .
 
       # 4. TRIVY (Vulnerabilidades de SO)
       - name: Trivy Container Scan
+        id: trivy
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: 'weather-api:latest'
           severity: 'CRITICAL,HIGH'
-          exit-code: 1  # Rompe el pipeline si hay críticos
+          exit-code: 1
 
       # 5. SBOM (Cumplimiento Legal con acceso al Docker Daemon)
       - name: Generate SBOM
+        id: sbom
         run: |
           docker run --rm \
             -v /var/run/docker.sock:/var/run/docker.sock \
             -v $(pwd):/out \
             anchore/syft:latest \
             docker:weather-api:latest -o spdx-json > sbom.json
-      # 6. AI AUDIT CON SANITIZACIÓN DE LOGS (El 10/10)
+
+      # 6. AI AUDIT CON SANITIZACIÓN DE LOGS
       - name: AI Security Audit
+        id: aiaudit
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: |
-          # Extraemos el diff pero filtramos palabras clave antes de que toque cualquier variable
           export CODE_DIFF=$(git diff HEAD^ HEAD | grep -vE 'password|token|key|secret' | head -c 4000)
-          python .github/scripts/ai_audit.py | sed 's/${{ secrets.GROQ_API_KEY }}/[REDACTED]/g'
+          # Ejecutamos el script y redirigimos la salida también al summary de GitHub
+          echo "### 🤖 AI Security Audit Report" >> $GITHUB_STEP_SUMMARY
+          python .github/scripts/ai_audit.py >> $GITHUB_STEP_SUMMARY
 
-      # 7. ARTIFACTS
+      # 7. GENERAR RESUMEN EJECUTIVO (Aparece en la página principal del Action)
+      - name: Generate Pipeline Summary
+        if: always()
+        run: |
+          echo "## 🛡️ DevSecOps Security Scorecard" >> $GITHUB_STEP_SUMMARY
+          echo "| Herramienta | Estado | Descripción |" >> $GITHUB_STEP_SUMMARY
+          echo "| :--- | :---: | :--- |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🔑 Gitleaks | ${{ steps.gitleaks.outcome == 'success' && '✅ PASSED' || '❌ FAILED' }} | Secret scanning |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🧬 PHPStan | ${{ steps.phpstan.outcome == 'success' && '✅ PASSED' || '❌ FAILED' }} | Análisis estático |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🐳 Trivy | ${{ steps.trivy.outcome == 'success' && '✅ PASSED' || '❌ FAILED' }} | Vulnerabilidades de Imagen |" >> $GITHUB_STEP_SUMMARY
+          echo "| 📦 Syft (SBOM) | ${{ steps.sbom.outcome == 'success' && '✅ PASSED' || '❌ FAILED' }} | Inventario generado |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🤖 AI Audit | ${{ steps.aiaudit.outcome == 'success' && '✅ PASSED' || '❌ FAILED' }} | Auditoría por IA |" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+
+      # 8. ARTIFACTS
       - name: Upload Security Reports
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: security-reports
           path: |
