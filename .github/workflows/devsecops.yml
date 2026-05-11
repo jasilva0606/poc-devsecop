@@ -413,13 +413,15 @@ jobs:
         run: |
           SCORE=100
           # FIX: TruffleHog ahora pesa igual que Gitleaks en el score
-          [ "${{ steps.gitleaks.outcome }}"   != "success" ] && SCORE=$((SCORE - 25))
-          [ "${{ steps.trufflehog.outcome }}" != "success" ] && SCORE=$((SCORE - 25))
-          [ "${{ steps.snyk.outcome }}"       == "failure" ] && SCORE=$((SCORE - 15))
-          [ "${{ steps.phpstan.outcome }}"    != "success" ] && SCORE=$((SCORE - 15))
-          [ "${{ steps.semgrep.outcome }}"    != "success" ] && SCORE=$((SCORE - 10))
-          [ "${{ steps.trivy.outcome }}"      != "success" ] && SCORE=$((SCORE - 20))
-          [ "${{ steps.checkov.outcome }}"    != "success" ] && SCORE=$((SCORE - 10))
+          [ "${{ steps.gitleaks.outcome }}"      != "success" ] && SCORE=$((SCORE - 20))
+          [ "${{ steps.trufflehog.outcome }}"   != "success" ] && SCORE=$((SCORE - 20))
+          [ "${{ steps.snyk.outcome }}"          == "failure" ] && SCORE=$((SCORE - 15))
+          [ "${{ steps.license_check.outcome }}" != "success" ] && SCORE=$((SCORE - 10))
+          [ "${{ steps.phpstan.outcome }}"       != "success" ] && SCORE=$((SCORE - 10))
+          [ "${{ steps.semgrep.outcome }}"       != "success" ] && SCORE=$((SCORE - 10))
+          [ "${{ steps.checkov.outcome }}"       != "success" ] && SCORE=$((SCORE -  5))
+          [ "${{ steps.conftest.outcome }}"      != "success" ] && SCORE=$((SCORE -  5))
+          [ "${{ steps.trivy.outcome }}"         != "success" ] && SCORE=$((SCORE - 15))
           [ "$SCORE" -lt 0 ] && SCORE=0
           echo "score=$SCORE" >> "$GITHUB_OUTPUT"
           echo "📊 Security Score: $SCORE/100"
@@ -451,14 +453,16 @@ jobs:
           | :--- | :---: |
           SUMMARY
 
-          printf "| 🔐 Gitleaks   | %s |\n"   "${{ steps.gitleaks.outcome == 'success' && '✅' || '❌' }}"    >> "$GITHUB_STEP_SUMMARY"
-          printf "| 🔍 TruffleHog | %s |\n"   "${{ steps.trufflehog.outcome == 'success' && '✅' || '❌' }}" >> "$GITHUB_STEP_SUMMARY"
-          printf "| 📦 Snyk (SCA) | %s |\n"   "${{ steps.snyk.outcome == 'success' && '✅' || '❌' }}"       >> "$GITHUB_STEP_SUMMARY"
-          printf "| 🧬 PHPStan    | %s |\n"   "${{ steps.phpstan.outcome == 'success' && '✅' || '❌' }}"    >> "$GITHUB_STEP_SUMMARY"
-          printf "| 🎯 Semgrep    | %s |\n"   "${{ steps.semgrep.outcome == 'success' && '✅' || '⚠️' }}"   >> "$GITHUB_STEP_SUMMARY"
-          printf "| 🏗️ Checkov   | %s |\n"   "${{ steps.checkov.outcome == 'success' && '✅' || '❌' }}"    >> "$GITHUB_STEP_SUMMARY"
-          printf "| 🛡️ Trivy     | %s |\n"   "${{ steps.trivy.outcome == 'success' && '✅' || '❌' }}"      >> "$GITHUB_STEP_SUMMARY"
-          printf "| 🦅 StackHawk | %s |\n"   "${{ steps.stackhawk.outcome == 'success' && '✅' || steps.stackhawk.outcome == 'skipped' && '⏭️' || '⚠️' }}" >> "$GITHUB_STEP_SUMMARY"
+          printf "| 🔐 Gitleaks        | %s |\n"  "${{ steps.gitleaks.outcome == 'success' && '✅' || '❌' }}"         >> "$GITHUB_STEP_SUMMARY"
+          printf "| 🔍 TruffleHog      | %s |\n"  "${{ steps.trufflehog.outcome == 'success' && '✅' || '❌' }}"      >> "$GITHUB_STEP_SUMMARY"
+          printf "| 📦 Snyk (SCA)      | %s |\n"  "${{ steps.snyk.outcome == 'success' && '✅' || '❌' }}"            >> "$GITHUB_STEP_SUMMARY"
+          printf "| ⚖️ Licenses        | %s |\n"  "${{ steps.license_check.outcome == 'success' && '✅' || '❌' }}"   >> "$GITHUB_STEP_SUMMARY"
+          printf "| 🧬 PHPStan         | %s |\n"  "${{ steps.phpstan.outcome == 'success' && '✅' || '❌' }}"         >> "$GITHUB_STEP_SUMMARY"
+          printf "| 🎯 Semgrep         | %s |\n"  "${{ steps.semgrep.outcome == 'success' && '✅' || '⚠️' }}"        >> "$GITHUB_STEP_SUMMARY"
+          printf "| 🏗️ Checkov        | %s |\n"  "${{ steps.checkov.outcome == 'success' && '✅' || '❌' }}"         >> "$GITHUB_STEP_SUMMARY"
+          printf "| 🛡️ OPA Conftest   | %s |\n"  "${{ steps.conftest.outcome == 'success' && '✅' || '❌' }}"        >> "$GITHUB_STEP_SUMMARY"
+          printf "| 🐳 Trivy           | %s |\n"  "${{ steps.trivy.outcome == 'success' && '✅' || '❌' }}"           >> "$GITHUB_STEP_SUMMARY"
+          printf "| 🦅 StackHawk       | %s |\n"  "${{ steps.stackhawk.outcome == 'success' && '✅' || steps.stackhawk.outcome == 'skipped' && '⏭️' || '⚠️' }}" >> "$GITHUB_STEP_SUMMARY"
 
       # ──────────────────────────────────────────────────────────────────────
       # FASE 10: AUDIT LOGGING

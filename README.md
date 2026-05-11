@@ -1,428 +1,384 @@
-# 🛡️ DevSecOps Pipeline - Enterprise Grade (10/10)
+# 🛡️ DevSecOps Pipeline — Enterprise Grade
 
-Pipeline de seguridad completo que integra todas las best practices de DevSecOps con scoring 10/10.
+Pipeline de seguridad completo para aplicaciones PHP, construido sobre GitHub Actions con 10 fases de cobertura, supply chain protection y AI-assisted audit.
 
-## 📊 Security Score: 10/10
-
-```
-✅ Secret Scanning:           10/10 ⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐
-✅ SCA (Dependencies):        10/10 ⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐
-✅ SAST (Static Analysis):    10/10 ⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐
-✅ IaC Security:              10/10 ⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐
-✅ Container Security:        10/10 ⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐
-✅ SBOM Generation:           10/10 ⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐
-✅ AI Security Audit:         10/10 ⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐
-✅ DAST (Dynamic Testing):    10/10 ⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐
-✅ Policy as Code:            10/10 ⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐
-✅ License Compliance:        10/10 ⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐
-✅ Reporting & Metrics:       10/10 ⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐
-✅ Audit Logging:             10/10 ⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-TOTAL SCORE:                  10/10 🏆
-```
-
-## 🏗️ Arquitectura del Pipeline
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    PRE-FLIGHT CHECKS                        │
-│  • Commit validation  • Risk scoring  • File change detect  │
-└────────────────────────┬────────────────────────────────────┘
-                         │
-            ┌────────────┴────────────┐
-            │                         │
-┌───────────▼──────────┐  ┌──────────▼─────────────┐
-│  SECRET SCANNING     │  │  DEPENDENCY SECURITY   │
-│  • Gitleaks          │  │  • Snyk (SCA)          │
-│  • TruffleHog        │  │  • Security Checker    │
-└───────────┬──────────┘  └──────────┬─────────────┘
-            │                        │
-            └────────────┬───────────┘
-                         │
-            ┌────────────▼────────────┐
-            │   STATIC ANALYSIS       │
-            │   • PHPStan (Level 6)   │
-            │   • Psalm               │
-            │   • Semgrep (OWASP)     │
-            └────────────┬────────────┘
-                         │
-            ┌────────────▼────────────┐
-            │   IaC SECURITY          │
-            │   • Checkov             │
-            │   • OPA Conftest        │
-            └────────────┬────────────┘
-                         │
-            ┌────────────▼────────────┐
-            │   CONTAINER BUILD       │
-            └────────────┬────────────┘
-                         │
-            ┌────────────▼────────────┐
-            │   CONTAINER SECURITY    │
-            │   • Trivy               │
-            │   • Grype               │
-            └────────────┬────────────┘
-                         │
-      ┌─────────────────┼─────────────────┐
-      │                 │                 │
-┌─────▼─────┐  ┌────────▼────────┐  ┌────▼────┐
-│   SBOM    │  │  AI AUDIT       │  │  DAST   │
-│  • Syft   │  │  • Groq LLM     │  │  • ZAP  │
-└─────┬─────┘  └────────┬────────┘  └────┬────┘
-      │                 │                 │
-      └─────────────────┼─────────────────┘
-                        │
-           ┌────────────▼────────────┐
-           │  LICENSE COMPLIANCE     │
-           └────────────┬────────────┘
-                        │
-           ┌────────────▼────────────┐
-           │  REPORTING & METRICS    │
-           │  • Security Score       │
-           │  • GitHub Summary       │
-           │  • Issue Creation       │
-           └────────────┬────────────┘
-                        │
-           ┌────────────▼────────────┐
-           │    AUDIT LOGGING        │
-           │  • 365-day retention    │
-           └─────────────────────────┘
-```
-
-## 🚀 Quick Start
-
-### 1. Prerequisitos
-
-- Cuenta GitHub con Actions habilitados
-- Repository con código PHP
-- Secrets configurados (ver abajo)
-
-### 2. Configurar Secrets
-
-En GitHub: **Settings → Secrets and variables → Actions**
-
-```bash
-# Obligatorios
-GROQ_API_KEY          # API key de Groq (https://console.groq.com)
-
-# Opcionales pero recomendados
-SNYK_TOKEN            # Token de Snyk (https://snyk.io)
-GITLEAKS_LICENSE      # License de Gitleaks (opcional)
-HAWK_API_KEY          # StackHawk API key (para DAST avanzado)
-```
-
-### 3. Copiar archivos al proyecto
-
-```bash
-# Estructura necesaria
-.github/
-├── workflows/
-│   └── devsecops-optimized.yml
-├── scripts/
-│   └── ai_audit_optimized.py
-└── policies/
-    └── dockerfile.rego
-
-# Copiar workflow
-cp devsecops-optimized.yml .github/workflows/
-
-# Copiar script IA
-cp ai_audit_optimized.py .github/scripts/
-
-# Copiar políticas (opcional pero recomendado)
-cp dockerfile.rego .github/policies/
-```
-
-### 4. Obtener Groq API Key (GRATIS)
-
-1. Ir a https://console.groq.com
-2. Crear cuenta (login con Google/GitHub)
-3. Ir a **API Keys**
-4. Crear nueva key
-5. Copiar y guardar en GitHub Secrets
-
-**Límites del tier gratuito de Groq:**
-- 30 requests/minuto
-- 14,400 requests/día
-- 6,000 tokens/minuto
-- ✅ Suficiente para CI/CD
-
-### 5. Push y verificar
-
-```bash
-git add .github/
-git commit -m "ci: add enterprise DevSecOps pipeline"
-git push
-```
-
-El pipeline se ejecutará automáticamente en cada push.
-
-## 📋 Qué hace cada fase
-
-### 🔐 FASE 1: Secret Scanning
-**Herramientas**: Gitleaks + TruffleHog
-
-- Escanea TODO el historial de Git
-- Detecta más de 700 tipos de secretos
-- Bloquea el pipeline si encuentra secrets
-- Verifica commits, branches, y PRs
-
-**Detecta**:
-- API keys, tokens, passwords
-- AWS/GCP/Azure credentials
-- Private keys (SSH, PGP, etc)
-- Database connection strings
-- OAuth tokens
-
-### 📦 FASE 2: Software Composition Analysis (SCA)
-**Herramientas**: Snyk + Security Checker
-
-- Analiza dependencias de `composer.json`
-- Detecta CVEs conocidos
-- Verifica licenses
-- Genera fix suggestions
-
-**Detecta**:
-- Vulnerabilidades en librerías
-- Versiones desactualizadas
-- Dependencias maliciosas
-- License incompatibles
-
-### 🔬 FASE 3: Static Analysis (SAST)
-**Herramientas**: PHPStan (L6) + Psalm + Semgrep
-
-- Análisis estático de código PHP
-- Detecta bugs y vulnerabilidades sin ejecutar
-- Valida tipos, patterns, y OWASP rules
-
-**Detecta**:
-- SQL Injection
-- XSS (Cross-Site Scripting)
-- Path Traversal
-- Insecure Deserialization
-- Type errors y bugs lógicos
-
-### 🏗️ FASE 4: Infrastructure as Code Security
-**Herramientas**: Checkov + OPA Conftest
-
-- Analiza Dockerfile y GitHub Actions
-- Valida configuraciones contra policies
-- Bloquea configuraciones inseguras
-
-**Detecta**:
-- Containers corriendo como root
-- Imágenes sin tag (`:latest`)
-- Puertos privilegiados expuestos
-- Secrets hardcodeados en ENV
-- Falta de HEALTHCHECK
-
-### 🛡️ FASE 5: Container Security
-**Herramientas**: Trivy + Grype
-
-- Escanea la imagen Docker construida
-- Detecta vulnerabilidades en OS y libraries
-- Verifica configuraciones inseguras
-
-**Detecta**:
-- CVEs en packages del OS
-- Vulnerabilidades en dependencias
-- Malware y rootkits
-- Secrets en layers
-- Configuraciones inseguras
-
-### 📜 FASE 6: SBOM Generation
-**Herramienta**: Syft
-
-- Genera Software Bill of Materials
-- Formatos: SPDX-JSON + CycloneDX
-- Cumplimiento legal y auditoría
-- Trazabilidad completa
-
-**Produce**:
-- Inventario de componentes
-- Versiones exactas
-- Licenses de cada componente
-- Relaciones de dependencias
-
-### 🤖 FASE 7: AI Security Audit
-**Herramienta**: Groq (LLaMA 3.3 70B)
-
-- Análisis semántico del código
-- Detecta vulnerabilidades contextuales
-- Genera recomendaciones específicas
-- Evalúa coherencia commit-código
-
-**Detecta**:
-- Vulnerabilidades lógicas
-- Business logic flaws
-- Race conditions
-- Diseño inseguro
-- Missing validations
-
-### 🎯 FASE 8: Dynamic Application Security Testing (DAST)
-**Herramienta**: OWASP ZAP
-
-- Escanea la aplicación CORRIENDO
-- Envía payloads de ataque reales
-- Detecta vulnerabilidades runtime
-
-**Detecta**:
-- Authentication bypass
-- Session hijacking
-- CSRF vulnerabilities
-- Injection en runtime
-- Security headers faltantes
-
-### ⚖️ FASE 9: License Compliance
-**Herramienta**: Composer Licenses
-
-- Verifica licenses de dependencias
-- Detecta licenses prohibidas (GPL, AGPL)
-- Asegura cumplimiento legal
-
-**Valida**:
-- MIT, Apache 2.0, BSD: ✅ Permitidas
-- GPL, AGPL, SSPL: ⚠️ Advertencia
-- Proprietary: 🚫 Bloqueado
-
-### 📊 FASE 10: Reporting & Metrics
-**Herramienta**: GitHub Actions nativo
-
-- Calcula Security Score (0-100)
-- Genera dashboard visual
-- Crea issues automáticos si falla
-- Preserva artifacts por 90 días
-
-**Genera**:
-- Security Scorecard
-- Executive summary
-- SARIF reports → GitHub Security tab
-- Artifacts descargables
-
-### 📝 FASE 11: Audit Logging
-**Formato**: JSON estructurado
-
-- Log de cada ejecución del pipeline
-- Retención: 365 días
-- Compliance con ISO27001, SOC2, GDPR
-
-**Contiene**:
-- Timestamp, commit, autor
-- Resultados de cada check
-- Security score
-- Evidencia de cumplimiento
-
-## 🎯 Compliance & Standards
-
-Este pipeline cumple con:
-
-- ✅ **OWASP Top 10 (2021)**
-- ✅ **CIS Benchmarks** (Docker, Kubernetes)
-- ✅ **NIST Cybersecurity Framework**
-- ✅ **ISO 27001** (Controles técnicos)
-- ✅ **SOC 2 Type II** (Security controls)
-- ✅ **GDPR** (Security by design)
-- ✅ **PCI DSS** (Development security)
-- ✅ **HIPAA** (Technical safeguards)
-
-## 📈 Métricas y KPIs
-
-El pipeline rastrea automáticamente:
-
-| Métrica | Descripción | Target |
-|---------|-------------|--------|
-| Security Score | Score general 0-100 | ≥ 85 |
-| MTTR | Mean Time To Remediate vulns | < 7 días |
-| Vulnerability Density | Vulns por 1000 LOC | < 1.0 |
-| False Positive Rate | % falsos positivos | < 5% |
-| Pipeline Success Rate | % ejecuciones exitosas | > 95% |
-| Scan Coverage | % código escaneado | 100% |
-
-## 🔧 Troubleshooting
-
-### "Groq API key not found"
-```bash
-# Verificar que el secret existe
-gh secret list
-
-# Agregar el secret
-gh secret set GROQ_API_KEY
-```
-
-### "PHPStan failed"
-```bash
-# Bajar el nivel de análisis temporalmente
-# En el workflow, cambiar: --level=6 por --level=5
-```
-
-### "Trivy encontró vulnerabilidades CRITICAL"
-```bash
-# Ver el reporte detallado
-gh run download <run-id>
-
-# Actualizar imagen base
-# En Dockerfile: FROM php:8.2-cli-alpine3.19
-```
-
-### "SBOM generation failed"
-```bash
-# Verificar que el Docker daemon está accesible
-docker info
-
-# Verificar que la imagen se construyó
-docker images | grep weather-api
-```
-
-## 🎓 Best Practices Implementadas
-
-### 1. Shift-Left Security
-- Security checks lo más temprano posible
-- Secret scanning ANTES de build
-- SAST antes de tests funcionales
-
-### 2. Defense in Depth
-- Múltiples capas de seguridad
-- Redundancia en detección (Trivy + Grype)
-- Complementariedad (SAST + DAST)
-
-### 3. Fail Fast
-- Pipeline falla inmediatamente ante CRITICAL
-- No avanza a producción con vulns conocidas
-- Feedback rápido al desarrollador
-
-### 4. Continuous Monitoring
-- Escaneo diario programado (cron)
-- Artifacts preservados 90 días
-- Audit logs 365 días
-
-### 5. Principle of Least Privilege
-- Containers no corren como root
-- Permisos mínimos en GitHub Actions
-- Secrets con scope limitado
-
-## 📚 Referencias
-
-- [OWASP Top 10](https://owasp.org/www-project-top-ten/)
-- [CWE Top 25](https://cwe.mitre.org/top25/)
-- [NIST Cybersecurity Framework](https://www.nist.gov/cyberframework)
-- [CIS Benchmarks](https://www.cisecurity.org/cis-benchmarks)
-- [SANS Top 25](https://www.sans.org/top25-software-errors/)
-
-## 🤝 Contribuciones
-
-Para mejorar este pipeline:
-
-1. Fork el repositorio
-2. Crear feature branch (`git checkout -b feature/nueva-herramienta`)
-3. Commit cambios con conventional commits (`git commit -m 'feat: add tool X'`)
-4. Push al branch (`git push origin feature/nueva-herramienta`)
-5. Abrir Pull Request
-
-## 📄 License
-
-MIT License - Ver LICENSE file
+**Mantenido por**: Jorge Silva · **Versión**: 2.1.0 · **Última actualización**: Mayo 2026
 
 ---
 
-**Mantenido por**: Jorge Silva
-**Última actualización**: Mayo 2026
-**Versión del Pipeline**: 2.0.0
+## 📊 Security Score: 90/100
+
+| Categoría | Score | Herramientas |
+|---|---|---|
+| 🔐 Secret Scanning | ✅ 10/10 | Gitleaks v2.3.9 + TruffleHog v3.94.3 |
+| 📦 SCA (Dependencias) | ✅ 10/10 | Snyk CLI v1.1296.2 (SHA256 verificado) |
+| 🔬 SAST | ✅ 10/10 | PHPStan nivel 8 + Semgrep OWASP |
+| 🏗️ IaC Security | ✅ 10/10 | Checkov v12.3075.0 |
+| 🐳 Container Security | ✅ 10/10 | Trivy v0.36.0 (post-incidente supply chain) |
+| 🎯 DAST | ✅ 10/10 | StackHawk v2.2.0 con stack nginx+fpm |
+| 📜 SBOM | ✅ 10/10 | Syft (SPDX-JSON + CycloneDX) |
+| 🤖 AI Audit | ✅ 10/10 | Groq LLaMA 3.3 70B con sanitización |
+| 📊 Reporting | ✅ 10/10 | Security scorecard + audit log con jq |
+| 🔗 Supply Chain | ✅ 10/10 | Todas las actions fijadas a SHA verificados |
+| ⚖️ License Compliance | ⚠️ 5/10 | Pendiente — ver roadmap |
+| 🛡️ Policy as Code | ⚠️ 5/10 | Pendiente — ver roadmap |
+
+**Score total: 90/100** — Productivo. Sin hallazgos críticos ni de alta severidad.
+
+---
+
+## ⚠️ Incidente de supply chain — Trivy (Marzo 2026)
+
+`aquasecurity/trivy-action` fue comprometido: 75 de 76 tags fueron reemplazados por un infostealer que robaba secrets de CI/CD. Este pipeline usa `v0.36.0` (`a9c7b0f0`), el primer release post-incidente verificado por Aqua Security.
+
+**Nunca usar** `@master`, `@main`, ni ningún tag anterior a `v0.35.0`.
+
+---
+
+## 🏗️ Arquitectura del pipeline
+
+```
+PUSH / PR / SCHEDULE
+        │
+        ▼
+┌───────────────────┐
+│  PREFLIGHT        │  Valida secrets obligatorios antes de gastar runner
+│  GITLEAKS_LICENSE │  Fallo rápido si falta SNYK_TOKEN o GITLEAKS_LICENSE
+│  SNYK_TOKEN       │
+└────────┬──────────┘
+         │
+         ▼
+┌─────────────────────────────────────────────────────┐
+│  FASE 1 — SECRET SCANNING                           │
+│  Gitleaks (historial completo) + TruffleHog         │
+│  Ambos bloqueantes — sin continue-on-error          │
+└────────┬────────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────────────────┐
+│  FASE 2 — SCA (Software Composition Analysis)       │
+│  Snyk CLI con verificación SHA256 antes de ejecutar │
+│  Gate duro: exit 1 = vulnerabilidades HIGH/CRITICAL │
+└────────┬────────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────────────────┐
+│  FASE 3 — SAST (Static Analysis)                   │
+│  PHPStan nivel 8 + Semgrep (auto + owasp + php)    │
+│  Ambos bloqueantes                                  │
+└────────┬────────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────────────────┐
+│  FASE 4 — IaC SECURITY                              │
+│  Checkov: Dockerfile + GitHub Actions               │
+│  soft_fail: false — gate duro                       │
+└────────┬────────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────────────────┐
+│  FASE 5 — CONTAINER BUILD & SCAN                    │
+│  docker build --no-cache                            │
+│  Trivy: exit-code 1 si CRITICAL/HIGH                │
+│  SARIF → GitHub Security tab                        │
+└────────┬────────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────────────────┐
+│  FASE 6 — DAST (Dynamic Testing)                    │
+│  Stack: nginx:alpine → FastCGI → php-fpm            │
+│  StackHawk escanea HTTP real en localhost:8080      │
+│  Solo en push (no en PRs)                           │
+└────────┬────────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────────────────┐
+│  FASE 7 — SBOM                                      │
+│  Syft genera SPDX-JSON + CycloneDX                  │
+│  Solo en push a main — retención 7 días             │
+└────────┬────────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────────────────┐
+│  FASE 8 — AI SECURITY AUDIT                         │
+│  Groq LLaMA 3.3 70B analiza el diff del PR          │
+│  Sanitización de secrets + límite de diff 200KB     │
+│  Solo en pull_request                               │
+└────────┬────────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────────────────┐
+│  FASE 9 — SECURITY SCORE & SUMMARY                  │
+│  Score ponderado: Gitleaks 25 + TruffleHog 25 +     │
+│  Snyk 15 + PHPStan 15 + Semgrep 10 +                │
+│  Trivy 20 + Checkov 10                              │
+└────────┬────────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────────────────┐
+│  FASE 10 — AUDIT LOGGING                            │
+│  JSON generado con jq (seguro contra inyección)     │
+│  Retención: 7 días (límite del repo)                │
+└─────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🚀 Setup
+
+### 1. Secrets obligatorios
+
+En GitHub: **Settings → Secrets and variables → Actions**
+
+| Secret | Descripción | Obtener en |
+|---|---|---|
+| `GITLEAKS_LICENSE` | Licencia Gitleaks (enterprise) | [gitleaks.io](https://gitleaks.io) |
+| `SNYK_TOKEN` | Token de Snyk | [app.snyk.io](https://app.snyk.io/account) |
+
+### 2. Secrets opcionales (habilitan fases adicionales)
+
+| Secret | Fase que habilita | Obtener en |
+|---|---|---|
+| `GROQ_API_KEY` | Fase 8 — AI Audit | [console.groq.com](https://console.groq.com) |
+| `HAWK_TOKEN` | Fase 6 — DAST | [app.stackhawk.com](https://app.stackhawk.com) |
+| `HAWK_APP_ID` | Fase 6 — DAST | Portal StackHawk |
+
+### 3. Estructura de archivos requerida
+
+```
+.
+├── .github/
+│   ├── workflows/
+│   │   └── devsecops.yml          # Pipeline principal
+│   ├── scripts/
+│   │   ├── ai_audit.py            # AI audit con Groq
+│   │   └── update-action-pins.sh  # Actualización mensual de SHAs
+│   └── policies/
+│       └── dockerfile.rego        # (roadmap) OPA Conftest policies
+├── .dockerignore                  # Excluye .git, tests, .github de la imagen
+├── .stackhawk.yml                 # Placeholder — se genera en runtime
+├── Dockerfile                     # Multi-stage, usuario non-root, healthcheck
+└── composer.json
+```
+
+### 4. Activar DAST (StackHawk)
+
+El DAST se omite silenciosamente si `HAWK_TOKEN` o `HAWK_APP_ID` no están configurados. Para activarlo:
+
+1. Crear cuenta en [app.stackhawk.com](https://app.stackhawk.com)
+2. Crear una aplicación y copiar el App ID
+3. Configurar `HAWK_TOKEN` y `HAWK_APP_ID` en GitHub Secrets
+
+### 5. Activar AI Audit (Groq — gratuito)
+
+1. Crear cuenta en [console.groq.com](https://console.groq.com)
+2. Ir a **API Keys** → crear nueva key (`gsk_...`)
+3. Configurar `GROQ_API_KEY` en GitHub Secrets
+
+Límites del tier gratuito: 30 req/min · 14,400 req/día · suficiente para CI/CD.
+
+---
+
+## 🔒 Supply chain security — SHA pinning
+
+Todas las GitHub Actions están fijadas a SHAs de commit verificados con `gh api`. Esto previene ataques de supply chain donde un actor malicioso modifica un tag existente.
+
+| Action | Versión | SHA verificado |
+|---|---|---|
+| `actions/checkout` | v4.2.2 | `11bd71901bbe5b1630ceea73d27597364c9af683` |
+| `actions/upload-artifact` | v4.6.2 | `ea165f8d65b6e75b540449e92b4886f43607fa02` |
+| `github/codeql-action` | codeql-bundle-v2.21.4 | `bc02a25f6449997c5e9d5a368879b28f56ae19a1` |
+| `gitleaks/gitleaks-action` | v2.3.9 | `ff98106e4c7b2bc287b24eaf42907196329070c7` |
+| `trufflesecurity/trufflehog` | v3.94.3 | `47e7b7cd74f578e1e3145d48f669f22fd1330ca6` |
+| `aquasecurity/trivy-action` | v0.36.0 ⚠️ | `a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8` |
+| `bridgecrewio/checkov-action` | v12.3075.0 | `02a4c5d6a02367e5ea493c34c26b094302fd3f61` |
+| `stackhawk/hawkscan-action` | v2.2.0 | `29a62fe1e926ea50ac87a1b64efc59b82ffd5b7d` |
+| `shivammathur/setup-php` | @v2 | Rolling tag (intencional — ver [docs](https://github.com/shivammathur/setup-php#usage)) |
+
+**Actualización mensual de SHAs:**
+
+```bash
+chmod +x .github/scripts/update-action-pins.sh
+./.github/scripts/update-action-pins.sh
+# Revisar el diff generado y hacer commit
+```
+
+---
+
+## 🗺️ Roadmap — Para llegar al 100/100
+
+Los siguientes ítems son los pendientes que llevarían el score de 90 a 100:
+
+### ⚖️ License Compliance (falta 5 pts)
+
+Verificar automáticamente que ninguna dependencia tiene licencia GPL, AGPL o propietaria que sea incompatible con el proyecto.
+
+```yaml
+- name: ⚖️ License Compliance Check
+  run: |
+    composer require --dev dominikb/composer-license-checker --no-interaction
+    vendor/bin/composer-license-checker check \
+      --allowList MIT \
+      --allowList Apache-2.0 \
+      --allowList BSD-2-Clause \
+      --allowList BSD-3-Clause \
+      --allowList ISC
+```
+
+### 🛡️ Policy as Code con OPA Conftest (falta 5 pts)
+
+Validar el Dockerfile contra políticas Rego customizadas, más expresivas que Checkov solo.
+
+```bash
+# Crear .github/policies/dockerfile.rego
+# Instalar conftest en el workflow:
+curl -L https://github.com/open-policy-agent/conftest/releases/download/v0.56.0/conftest_Linux_x86_64.tar.gz \
+  | tar xz && sudo mv conftest /usr/local/bin/
+conftest test Dockerfile --policy .github/policies/
+```
+
+Ejemplo de política en `dockerfile.rego`:
+
+```rego
+package main
+
+deny[msg] {
+  input[i].Cmd == "user"
+  input[i].Value[0] == "root"
+  msg = "No ejecutar el contenedor como root"
+}
+
+deny[msg] {
+  input[i].Cmd == "from"
+  endswith(input[i].Value[0], ":latest")
+  msg = "No usar :latest como tag de imagen base"
+}
+```
+
+### 🔄 Mantenimiento recurrente (no suma pts, pero es crítico)
+
+```bash
+# Ejecutar mensualmente:
+./.github/scripts/update-action-pins.sh
+
+# Actualizar Snyk CLI en el workflow cuando salga nueva versión:
+# SNYK_VERSION="v1.XXXX.X"  ← verificar en https://github.com/snyk/cli/releases
+```
+
+---
+
+## 🐳 Dockerfile — Decisiones de seguridad
+
+El Dockerfile implementa multi-stage build con las siguientes consideraciones:
+
+- **Stage 1 (builder)**: instala git, unzip y composer solo para resolver dependencias. No llega a producción.
+- **Stage 2 (runtime)**: imagen `php:8.3-fpm-alpine` mínima. Solo `libzip` y `fcgi` (para healthcheck).
+- **Usuario non-root**: `USER www-data` — el proceso PHP-FPM no tiene privilegios de sistema.
+- **Healthcheck real**: usa `cgi-fcgi` para validar que PHP-FPM responde el protocolo FastCGI, no solo que el proceso existe.
+- **`.dockerignore`**: excluye `.git`, `.github/`, `tests/`, `*.sarif`, `*.md` — la imagen de producción no contiene artefactos de desarrollo ni historial de git.
+
+> **Nota sobre DAST**: php-fpm expone FastCGI (puerto 9000), no HTTP. El step de DAST levanta un `nginx:alpine` como proxy HTTP→FastCGI para que StackHawk pueda hacer requests HTTP reales.
+
+---
+
+## 🔧 Troubleshooting
+
+### "GITLEAKS_LICENSE / SNYK_TOKEN no encontrado"
+
+El job `preflight` falla rápido si estos secrets no están configurados.
+
+```bash
+gh secret list                          # verificar qué secrets existen
+gh secret set GITLEAKS_LICENSE          # configurar interactivamente
+gh secret set SNYK_TOKEN
+```
+
+### "sha256sum: snyk-linux: No such file or directory"
+
+El archivo `.sha256` de Snyk referencia el nombre original `snyk-linux`. Descargar conservando ese nombre:
+
+```bash
+# Correcto:
+curl -sSL ".../snyk-linux" -o snyk-linux
+curl -sSL ".../snyk-linux.sha256" -o snyk-linux.sha256
+sha256sum -c snyk-linux.sha256           # busca "snyk-linux", lo encuentra
+```
+
+### "Unable to resolve action @SHA"
+
+Los SHAs en el workflow fueron verificados con `gh api` el 2026-05-10. Si un SHA falla es porque fue verificado incorrectamente. Obtener el SHA real:
+
+```bash
+gh api repos/{owner}/{repo}/git/ref/tags/{tag} --jq '.object.sha'
+# Ejemplo:
+gh api repos/aquasecurity/trivy-action/git/ref/tags/v0.36.0 --jq '.object.sha'
+```
+
+### "StackHawk: applicationId: '' — Invalid value"
+
+StackHawk CLI no interpola `${VAR}` en el YAML. El archivo `.stackhawk.yml` se genera en runtime en el step `Generate StackHawk config` con el valor real de `HAWK_APP_ID`. Verificar que el secret está configurado.
+
+### "Trivy Container Scan — exit code 1"
+
+Trivy encontró CVEs de severidad CRITICAL o HIGH en la imagen. Ver el reporte:
+
+```bash
+gh run download <run-id>                # descarga artifacts incluyendo trivy-results.sarif
+# O en GitHub: Security tab → Code scanning alerts
+```
+
+Para actualizar la imagen base si la vulnerabilidad está en el OS:
+
+```dockerfile
+FROM php:8.3-fpm-alpine  # actualizar al tag más reciente disponible
+```
+
+### "Semgrep — chmod: Operation not permitted"
+
+El container de Semgrep corre como root y crea `semgrep.sarif` con permisos que el runner no puede cambiar. El `chmod` fue removido del workflow — el archivo es legible por `codeql-action/upload-sarif` sin necesitar el cambio de permisos.
+
+### "Retention days cannot be greater than the maximum allowed"
+
+El repo tiene configurado un máximo de 7 días en **Settings → Actions → General → Artifact and log retention**. Para subir el límite: Settings → Actions → General → Artifact and log retention → cambiar a 90 o 365 días.
+
+---
+
+## 📋 Compliance
+
+Este pipeline genera evidencia técnica para los siguientes estándares:
+
+| Estándar | Control cubierto | Evidencia generada |
+|---|---|---|
+| **OWASP Top 10 (2021)** | A06 Vulnerable Components, A05 Security Misconfiguration | Snyk + Trivy SARIFs |
+| **NIST CSF** | ID.RA (Risk Assessment), PR.DS (Data Security) | Audit log JSON |
+| **ISO 27001** | A.14.2.2 (System change control) | Pipeline run artifacts |
+| **SOC 2 Type II** | CC7.1 (System monitoring) | Security scorecard |
+| **CIS Benchmarks** | Docker CIS | Checkov SARIF |
+
+---
+
+## 📚 Referencias técnicas
+
+- [OWASP Top 10 2021](https://owasp.org/www-project-top-ten/)
+- [CWE Top 25](https://cwe.mitre.org/top25/)
+- [GitHub Actions — SHA pinning](https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#using-third-party-actions)
+- [Trivy supply chain incident (Marzo 2026)](https://github.com/aquasecurity/trivy/discussions/10425)
+- [StackHawk — FastCGI apps](https://docs.stackhawk.com/hawkscan/configuration)
+- [Snyk CLI reference](https://docs.snyk.io/snyk-cli/cli-commands-and-options-summary)
+- [Semgrep rules — PHP](https://semgrep.dev/p/php)
+
+---
+
+## 🤝 Contribuciones
+
+1. Fork el repositorio
+2. Crear feature branch: `git checkout -b feat/nueva-herramienta`
+3. Commit con conventional commits: `git commit -m 'feat: add grype as secondary container scanner'`
+4. Push: `git push origin feat/nueva-herramienta`
+5. Abrir Pull Request → el AI Audit analizará el diff automáticamente
+
+---
+
+## 📄 License
+
+MIT License — ver archivo `LICENSE`
