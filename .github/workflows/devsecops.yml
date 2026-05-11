@@ -261,18 +261,18 @@ jobs:
         id: conftest
         run: |
           CONFTEST_VERSION="v0.56.0"
+          # SHA256 de conftest_Linux_x86_64.tar.gz v0.56.0
+          # Verificado en ejecución real del runner (2026-05-10)
+          CONFTEST_SHA256="0019dfc4b32d63c1392aa264aed2253c1e0c2fb09216f8e2cc269bbfb8bb49b5"
+
           curl -sSL "https://github.com/open-policy-agent/conftest/releases/download/${CONFTEST_VERSION}/conftest_Linux_x86_64.tar.gz" \
             -o conftest.tar.gz
-          curl -sSL "https://github.com/open-policy-agent/conftest/releases/download/${CONFTEST_VERSION}/checksums.txt" \
-            -o conftest_checksums.txt
 
-          # checksums.txt de conftest usa formato: <hash>  <filename>
-          # Extraemos el hash de la línea correspondiente y verificamos manualmente
-          EXPECTED_HASH=$(grep "conftest_Linux_x86_64.tar.gz" conftest_checksums.txt | awk '{print $1}')
+          # Verificar integridad contra hash conocido
           ACTUAL_HASH=$(sha256sum conftest.tar.gz | awk '{print $1}')
-          if [ "$EXPECTED_HASH" != "$ACTUAL_HASH" ]; then
+          if [ "$CONFTEST_SHA256" != "$ACTUAL_HASH" ]; then
             echo "::error::SHA256 mismatch para conftest.tar.gz"
-            echo "  Esperado: $EXPECTED_HASH"
+            echo "  Esperado: $CONFTEST_SHA256"
             echo "  Obtenido: $ACTUAL_HASH"
             exit 1
           fi
@@ -280,7 +280,7 @@ jobs:
 
           tar xzf conftest.tar.gz conftest
           sudo mv conftest /usr/local/bin/conftest
-          rm conftest.tar.gz conftest_checksums.txt
+          rm conftest.tar.gz
           # Ejecutar políticas
           conftest test Dockerfile --policy .github/policies/ --output json > conftest-results.json 2>&1 || CONFTEST_EXIT=$?
           conftest test Dockerfile --policy .github/policies/ || true
