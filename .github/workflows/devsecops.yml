@@ -265,8 +265,19 @@ jobs:
             -o conftest.tar.gz
           curl -sSL "https://github.com/open-policy-agent/conftest/releases/download/${CONFTEST_VERSION}/checksums.txt" \
             -o conftest_checksums.txt
-          # Verificar integridad — grep extrae solo la línea del archivo que descargamos
-          grep "conftest_Linux_x86_64.tar.gz" conftest_checksums.txt | sha256sum -c -
+
+          # checksums.txt de conftest usa formato: <hash>  <filename>
+          # Extraemos el hash de la línea correspondiente y verificamos manualmente
+          EXPECTED_HASH=$(grep "conftest_Linux_x86_64.tar.gz" conftest_checksums.txt | awk '{print $1}')
+          ACTUAL_HASH=$(sha256sum conftest.tar.gz | awk '{print $1}')
+          if [ "$EXPECTED_HASH" != "$ACTUAL_HASH" ]; then
+            echo "::error::SHA256 mismatch para conftest.tar.gz"
+            echo "  Esperado: $EXPECTED_HASH"
+            echo "  Obtenido: $ACTUAL_HASH"
+            exit 1
+          fi
+          echo "✅ Checksum verificado: $ACTUAL_HASH"
+
           tar xzf conftest.tar.gz conftest
           sudo mv conftest /usr/local/bin/conftest
           rm conftest.tar.gz conftest_checksums.txt
