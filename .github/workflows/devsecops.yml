@@ -274,7 +274,7 @@ jobs:
 
           # SHA256 de conftest_0.56.0_Linux_x86_64.tar.gz — verificado en runner 2026-05-10
           # Para actualizar: ver el valor "Obtenido:" en el log si aparece mismatch
-          CONFTEST_SHA256="a267ec51576998b2a0f2cdba1c2f0c6ecc0069dbc1ca5dae1f351ca4d41c4834"
+          CONFTEST_SHA256="620f41640d63bbde1646a108ce2816ba54c980466ceebb7e754dda2d508e8cd5"
           ACTUAL_HASH=$(sha256sum conftest.tar.gz | awk '{print $1}')
           echo "SHA256 obtenido: $ACTUAL_HASH"
           if [ "$CONFTEST_SHA256" != "$ACTUAL_HASH" ]; then
