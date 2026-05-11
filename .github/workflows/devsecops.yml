@@ -309,6 +309,30 @@ jobs:
           HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/ || echo "000")
           echo "✅ App respondiendo — HTTP $HTTP_CODE en localhost:8080"
 
+      - name: 🦅 Generate StackHawk config
+        if: steps.start_app.outcome == 'success'
+        env:
+          HAWK_APP_ID: ${{ secrets.HAWK_APP_ID }}
+        run: |
+          # StackHawk CLI no interpola ${VAR} en el YAML.
+          # Generamos el archivo en runtime con los valores reales ya expandidos.
+          cat > .stackhawk.yml << EOF
+          app:
+            applicationId: "${HAWK_APP_ID}"
+            env: ci
+            host: http://localhost:8080
+            paths:
+              - /
+          hawk:
+            failureThreshold: high
+            spider:
+              maxDuration: 2
+              ajaxSpider: false
+            scan:
+              maxDuration: 10
+          EOF
+          echo "✅ .stackhawk.yml generado con applicationId: ${HAWK_APP_ID:0:8}..."
+
       - name: 🦅 StackHawk DAST Scan
         id: stackhawk
         if: steps.start_app.outcome == 'success'
@@ -317,10 +341,6 @@ jobs:
         with:
           apiKey: ${{ secrets.HAWK_TOKEN }}
           configurationFiles: .stackhawk.yml
-        env:
-          APP_ID: ${{ secrets.HAWK_APP_ID }}
-          APP_ENV: ci
-          APP_HOST: http://localhost:8080
 
       - name: 🛑 Stop DAST App
         if: always() && github.event_name == 'push'
