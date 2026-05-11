@@ -161,6 +161,41 @@ jobs:
       # ──────────────────────────────────────────────────────────────────────
       # FASE 3: SAST (Static Analysis)
       # ──────────────────────────────────────────────────────────────────────
+      # ──────────────────────────────────────────────────────────────────────
+      # FASE 2.5: LICENSE COMPLIANCE
+      # ──────────────────────────────────────────────────────────────────────
+      - name: ⚖️ License Compliance Check
+        id: license_check
+        run: |
+          composer require --dev dominikb/composer-license-checker --no-interaction
+          vendor/bin/composer-license-checker check \
+            --allowList MIT \
+            --allowList Apache-2.0 \
+            --allowList BSD-2-Clause \
+            --allowList BSD-3-Clause \
+            --allowList ISC \
+            --allowList LGPL-2.1-only \
+            --allowList LGPL-3.0-only \
+            --allowList MPL-2.0 \
+            > license-report.txt 2>&1 || LICENSE_EXIT=$?
+          cat license-report.txt
+          if [ "${LICENSE_EXIT:-0}" -ne 0 ]; then
+            echo "::error::Licencias incompatibles detectadas — ver license-report.txt"
+            exit "${LICENSE_EXIT}"
+          fi
+          echo "✅ Todas las licencias son compatibles"
+
+      - name: Upload License Report
+        if: always() && hashFiles('license-report.txt') != ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: license-report-${{ github.sha }}
+          path: license-report.txt
+          retention-days: 7
+
+      # ──────────────────────────────────────────────────────────────────────
+      # FASE 3: SAST (Static Analysis)
+      # ──────────────────────────────────────────────────────────────────────
       - name: 🧬 PHPStan Static Analysis
         id: phpstan
         run: |
@@ -217,6 +252,40 @@ jobs:
         with:
           sarif_file: checkov.sarif
           category: checkov
+
+
+      # ──────────────────────────────────────────────────────────────────────
+      # FASE 4.5: POLICY AS CODE — OPA Conftest
+      # ──────────────────────────────────────────────────────────────────────
+      - name: 🛡️ OPA Conftest — Policy as Code
+        id: conftest
+        run: |
+          CONFTEST_VERSION="v0.56.0"
+          curl -sSL "https://github.com/open-policy-agent/conftest/releases/download/${CONFTEST_VERSION}/conftest_Linux_x86_64.tar.gz" \
+            -o conftest.tar.gz
+          curl -sSL "https://github.com/open-policy-agent/conftest/releases/download/${CONFTEST_VERSION}/checksums.txt" \
+            -o conftest_checksums.txt
+          # Verificar integridad — grep extrae solo la línea del archivo que descargamos
+          grep "conftest_Linux_x86_64.tar.gz" conftest_checksums.txt | sha256sum -c -
+          tar xzf conftest.tar.gz conftest
+          sudo mv conftest /usr/local/bin/conftest
+          rm conftest.tar.gz conftest_checksums.txt
+          # Ejecutar políticas
+          conftest test Dockerfile --policy .github/policies/ --output json > conftest-results.json 2>&1 || CONFTEST_EXIT=$?
+          conftest test Dockerfile --policy .github/policies/ || true
+          if [ "${CONFTEST_EXIT:-0}" -ne 0 ]; then
+            echo "::error::Dockerfile viola políticas de seguridad — ver conftest-results.json"
+            exit "${CONFTEST_EXIT}"
+          fi
+          echo "✅ Dockerfile cumple todas las políticas"
+
+      - name: Upload Conftest Results
+        if: always() && hashFiles('conftest-results.json') != ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: conftest-results-${{ github.sha }}
+          path: conftest-results.json
+          retention-days: 7
 
       # ──────────────────────────────────────────────────────────────────────
       # FASE 5: CONTAINER BUILD & SCAN
