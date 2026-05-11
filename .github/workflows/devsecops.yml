@@ -169,14 +169,14 @@ jobs:
         run: |
           composer require --dev dominikb/composer-license-checker --no-interaction
           vendor/bin/composer-license-checker check \
-            --allowList MIT \
-            --allowList Apache-2.0 \
-            --allowList BSD-2-Clause \
-            --allowList BSD-3-Clause \
-            --allowList ISC \
-            --allowList LGPL-2.1-only \
-            --allowList LGPL-3.0-only \
-            --allowList MPL-2.0 \
+            --allowlist MIT \
+            --allowlist Apache-2.0 \
+            --allowlist BSD-2-Clause \
+            --allowlist BSD-3-Clause \
+            --allowlist ISC \
+            --allowlist LGPL-2.1-only \
+            --allowlist LGPL-3.0-only \
+            --allowlist MPL-2.0 \
             > license-report.txt 2>&1 || LICENSE_EXIT=$?
           cat license-report.txt
           if [ "${LICENSE_EXIT:-0}" -ne 0 ]; then
