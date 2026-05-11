@@ -272,16 +272,19 @@ jobs:
           # Verificar que realmente es un tar.gz antes de extraer
           file conftest.tar.gz
 
-          # SHA256 verificado en ejecución real del runner (2026-05-10)
-          CONFTEST_SHA256="0019dfc4b32d63c1392aa264aed2253c1e0c2fb09216f8e2cc269bbfb8bb49b5"
+          # SHA256 de conftest_0.56.0_Linux_x86_64.tar.gz — verificado en runner 2026-05-10
+          # Para actualizar: ver el valor "Obtenido:" en el log si aparece mismatch
+          CONFTEST_SHA256="a267ec51576998b2a0f2cdba1c2f0c6ecc0069dbc1ca5dae1f351ca4d41c4834"
           ACTUAL_HASH=$(sha256sum conftest.tar.gz | awk '{print $1}')
+          echo "SHA256 obtenido: $ACTUAL_HASH"
           if [ "$CONFTEST_SHA256" != "$ACTUAL_HASH" ]; then
-            echo "::warning::SHA256 inesperado — puede ser nueva versión del binario"
+            echo "::error::SHA256 mismatch para conftest — posible manipulación del binario"
             echo "  Esperado: $CONFTEST_SHA256"
             echo "  Obtenido: $ACTUAL_HASH"
-          else
-            echo "✅ Checksum verificado: $ACTUAL_HASH"
+            echo "  Si conftest publicó una nueva versión, actualizar CONFTEST_SHA256 en el workflow."
+            exit 1
           fi
+          echo "✅ Checksum verificado: $ACTUAL_HASH"
 
           tar xzf conftest.tar.gz conftest
           sudo mv conftest /usr/local/bin/conftest
